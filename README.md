@@ -1,4 +1,4 @@
-# PuttyKeyFormat  
+# PuttyKeyFormat (JAVA 8+)
 PuttyKeyReader and PuttyKeyWriter (.ppk)  
 
 Class "de.soderer.utilities.PuttyKey":  
@@ -11,6 +11,8 @@ Those files may be encrypted by "aes256-cbc" or unencrypted.
 Class "de.soderer.utilities.PuttyKeyWriter":  
 Writes PuTTY keys to ".ppk" format.  
 Also writes an unencrypted ".pem" format for usage in OpenSSH.  
-For encrypted ".pem" files use PuttyKeyOpenSshHelper, which deoends on the BouncyCastle crypto library.  
+
+Class "de.soderer.utilities.PuttyKeyOpenSshHelper"
+For encrypted ".pem" files use PuttyKeyOpenSshHelper, which depends on the BouncyCastle crypto library (bcpkix-jdk15on-1.61.jar).  
 
 For Usage see class "de.soderer.utilities.test.PuttyKeyTest"  
