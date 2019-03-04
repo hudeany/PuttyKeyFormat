@@ -2,7 +2,7 @@
 PuttyKeyReader and PuttyKeyWriter (.ppk)  
 
 Class "de.soderer.utilities.PuttyKey":  
-Stores the key pair data of a PuttyKey.
+Stores the key pair data of a PuTTY Key.
 
 Class "de.soderer.utilities.PuttyKeyReader":  
 Reads PuTTY key files in ".ppk" format.  
