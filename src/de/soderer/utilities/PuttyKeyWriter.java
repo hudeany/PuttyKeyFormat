@@ -273,16 +273,11 @@ public class PuttyKeyWriter implements Closeable {
 		} else if ("".equals(dataString)) {
 			return 1;
 		} else {
-			LineNumberReader lineNumberReader = null;
-			try {
-				lineNumberReader = new LineNumberReader(new StringReader(dataString));
+			try (LineNumberReader lineNumberReader = new LineNumberReader(new StringReader(dataString))) {
 				while (lineNumberReader.readLine() != null) {
 					// do nothing
 				}
-
 				return lineNumberReader.getLineNumber();
-			} finally {
-				Utilities.closeQuietly(lineNumberReader);
 			}
 		}
 	}
