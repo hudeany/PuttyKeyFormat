@@ -1,4 +1,4 @@
-# PuttyKeyFormat (JAVA 8+)
+# PuttyKeyFormat (JAVA 8)
 PuttyKeyReader and PuttyKeyWriter (.ppk)  
 
 ## Class "de.soderer.utilities.PuttyKey"  
