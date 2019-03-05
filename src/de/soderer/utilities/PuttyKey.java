@@ -11,6 +11,7 @@ import java.math.BigInteger;
 import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.MessageDigest;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.interfaces.DSAPrivateKey;
@@ -124,6 +125,37 @@ public class PuttyKey {
 		this.comment = comment;
 	}
 
+	public String getMd5Fingerprint() throws Exception {
+		try {
+			final MessageDigest md = MessageDigest.getInstance("MD5");
+			md.update(getPublicKeyBytes());
+			return toHexString(md.digest(), ":");
+		} catch (final Exception e) {
+			throw new Exception("Cannot create MD5 fingerprint", e);
+		}
+	}
+
+	private String toHexString(final byte[] data, final String separator) {
+		final StringBuilder returnString = new StringBuilder();
+		for (final byte dataByte : data) {
+			if (returnString.length() > 0) {
+				returnString.append(separator);
+			}
+			returnString.append(String.format("%02X", dataByte));
+		}
+		return returnString.toString().toLowerCase();
+	}
+
+	public String getSha256Fingerprint() throws Exception {
+		try {
+			final MessageDigest md = MessageDigest.getInstance("SHA-256");
+			md.update(getPublicKeyBytes());
+			return Base64.getEncoder().encodeToString(md.digest());
+		} catch (final Exception e) {
+			throw new Exception("Cannot create SHA256 fingerprint", e);
+		}
+	}
+
 	/**
 	 * Contains
 	 *  ssh-rsa: RSAPublicKey and RSAPrivateCrtKey
@@ -150,6 +182,37 @@ public class PuttyKey {
 			publicKeyWriter.writeBigInt(publicKey.getParams().getG());
 			publicKeyWriter.writeBigInt(publicKey.getY());
 			return publicKeyWriter.toByteArray();
+			//		} else if () {
+			//            ByteArrayOutputStream buf = new ByteArrayOutputStream();
+			//
+			//            int bitLength = key.getW().getAffineX().bitLength();
+			//            String curveName = null;
+			//            int qLen;
+			//            if (bitLength <= 256) {
+			//                curveName = "nistp256";
+			//                qLen = 65;
+			//            } else if (bitLength <= 384) {
+			//                curveName = "nistp384";
+			//                qLen = 97;
+			//            } else if (bitLength <= 521) {
+			//                curveName = "nistp521";
+			//                qLen = 133;
+			//            } else {
+			//                throw new CryptoException("ECDSA bit length unsupported: " + bitLength);
+			//            }
+			//
+			//            byte[] name = ("ecdsa-sha2-" + curveName).getBytes(StandardCharsets.US_ASCII);
+			//            byte[] curve = curveName.getBytes(StandardCharsets.US_ASCII);
+			//            writeArray(name, buf);
+			//            writeArray(curve, buf);
+			//
+			//            byte[] javaEncoding = key.getEncoded();
+			//            byte[] q = new byte[qLen];
+			//
+			//            System.arraycopy(javaEncoding, javaEncoding.length - qLen, q, 0, qLen);
+			//            writeArray(q, buf);
+			//
+			//            return buf.toByteArray();
 		} else {
 			throw new IllegalArgumentException("Unsupported cipher: " + getAlgorithm());
 		}
