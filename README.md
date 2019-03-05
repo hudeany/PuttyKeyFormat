@@ -11,7 +11,7 @@ Those files may be encrypted by "aes256-cbc" or unencrypted.
 This is a pure JAVA 8 class with no special external dependencies.
 
 ## Class "de.soderer.utilities.PuttyKeyWriter"  
-Writes PuTTY keys to ".ppk" format.  
+Writes PuTTY keys to encrypted or unencrypted ".ppk" format.  
 Also writes an unencrypted ".pem" format for usage in OpenSSH.  
 This is a pure JAVA 8 class with no special external dependencies.
 
