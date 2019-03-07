@@ -1,8 +1,9 @@
 # PuttyKeyFormat (JAVA 8)
 PuttyKeyReader and PuttyKeyWriter (.ppk)  
 Supported ciphers:  
-- ss-rsa  
-- ssh-dsa  
+- ss-rsa (RSA)  
+- ssh-dss (DSA)  
+(comming soon: - ssh-ecdsa (EC))
 
 ## Class "de.soderer.utilities.PuttyKey"  
 Stores the key pair data of a PuTTY Key.  
