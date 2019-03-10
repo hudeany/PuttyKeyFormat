@@ -19,14 +19,23 @@ import org.bouncycastle.openssl.jcajce.JcePEMEncryptorBuilder;
  * Therefore it is kept in an extra class.
  */
 public class PuttyKeyOpenSshHelper {
-	public static String convertPuttyKeyToProtectedPrivateOpenSshKey(final PuttyKey puttyKey, final String exportedKeyPassword) throws Exception {
+	/**
+	 * Write password protected pem file (PKCS#8)<br />
+	 * keyEncryptionCipherName:<br />
+	 *   default is "AES-128-CBC"<br />
+	 *   other value may be "DES-EDE3-CBC"<br />
+	 */
+	public static String writeKeyPairToProtectedPrivateOpenSshKey(final KeyPair keyPair, String keyEncryptionCipherName, final String exportedKeyPassword) throws Exception {
 		Security.addProvider(new BouncyCastleProvider());
 
-		final KeyPair keyPair = puttyKey.getKeyPair();
+		if (keyEncryptionCipherName == null || "".equals(keyEncryptionCipherName.trim())) {
+			keyEncryptionCipherName = "AES-128-CBC";
+		}
+
 		final ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 		try (final JcaPEMWriter jcaPEMWriter = new JcaPEMWriter(new OutputStreamWriter(outputStream, StandardCharsets.US_ASCII))) {
 			if (exportedKeyPassword != null) {
-				final PEMEncryptor pemEncryptor = new JcePEMEncryptorBuilder("AES-128-CBC").build(exportedKeyPassword.toCharArray());
+				final PEMEncryptor pemEncryptor = new JcePEMEncryptorBuilder(keyEncryptionCipherName).build(exportedKeyPassword.toCharArray());
 				final JcaMiscPEMGenerator pemGenerator = new JcaMiscPEMGenerator(keyPair.getPrivate(), pemEncryptor);
 				jcaPEMWriter.writeObject(pemGenerator);
 			} else {
