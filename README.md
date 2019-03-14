@@ -17,7 +17,7 @@ This is a pure JAVA 8 class with no special external dependencies.
 ## Class "de.soderer.utilities.PuttyKeyWriter"  
 Writes PuTTY keys to encrypted or unencrypted ".ppk" format.  
 Writes PuTTY keys to encrypted or unencrypted ".pem" (PKCS#8) format, using AES-128 or TripleDES key encryption.  
-Writes PuTTY keys to unencrypted ".pem" format for usage in OpenSSH.  
+Writes PuTTY keys to unencrypted ".pem" (PKCS#1) format for usage in OpenSSH.  
 This is a pure JAVA 8 class with no special external dependencies.
 
 For usage see class "de.soderer.utilities.test.PuttyKeyTest"  
