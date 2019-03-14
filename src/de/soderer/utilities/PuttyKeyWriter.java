@@ -323,7 +323,7 @@ public class PuttyKeyWriter implements Closeable {
 	}
 
 	protected static byte[] stretchPasswordForOpenSsl(final String password, final byte[] iv, final int usingIvSize, final int keySize) throws Exception {
-		final byte[] passphraseBytes = password.getBytes("UTF-8");
+		final byte[] passphraseBytes = password.getBytes("ISO-8859-1");
 		final MessageDigest hash = MessageDigest.getInstance("MD5");
 		final byte[] key = new byte[keySize];
 		int hashesSize = keySize & 0XFFFFFFF0;
