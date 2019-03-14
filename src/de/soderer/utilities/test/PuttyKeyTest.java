@@ -8,6 +8,16 @@ import de.soderer.utilities.PuttyKeyReader;
 import de.soderer.utilities.PuttyKeyWriter;
 
 public class PuttyKeyTest {
+	public static void main(final String[] args) {
+		try {
+			new PuttyKeyTest().test();
+
+			System.out.println("Test passed successfully");
+		} catch (final Exception e) {
+			System.out.println("Test failed: " + e.getMessage());
+		}
+	}
+
 	public void test() throws Exception {
 		final PuttyKey puttyKey = new PuttyKey("TestKey", 2048);
 
