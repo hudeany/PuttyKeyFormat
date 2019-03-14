@@ -165,7 +165,7 @@ public class PuttyKeyReader implements Closeable {
 		return puttyKeyEncryptionKey;
 	}
 
-	private String calculateMacChecksum(final byte[] passwordBytes, final String keyType, final String encryptionType, final String comment, final byte[] publicKey, final byte[] privateKey) throws Exception {
+	private static String calculateMacChecksum(final byte[] passwordBytes, final String keyType, final String encryptionType, final String comment, final byte[] publicKey, final byte[] privateKey) throws Exception {
 		final MessageDigest digest = MessageDigest.getInstance("SHA-1");
 		digest.update("putty-private-key-file-mac-key".getBytes());
 		if (passwordBytes != null) {
@@ -200,7 +200,7 @@ public class PuttyKeyReader implements Closeable {
 		return toHexString(mac.doFinal(out.toByteArray())).toLowerCase();
 	}
 
-	private String toHexString(final byte[] data) {
+	private static String toHexString(final byte[] data) {
 		final StringBuilder returnString = new StringBuilder();
 		for (final byte dataByte : data) {
 			returnString.append(String.format("%02X", dataByte));

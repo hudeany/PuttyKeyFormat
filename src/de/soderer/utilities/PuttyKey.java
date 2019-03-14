@@ -50,6 +50,9 @@ public class PuttyKey {
 	 * Create a RSA PuTTY key of given strength
 	 */
 	public PuttyKey(final String comment, final int keyStrength) throws Exception {
+		if (keyStrength < 512) {
+			throw new Exception("Invalid RSA key strength: " + keyStrength);
+		}
 		this.comment = comment;
 		final KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
 		keyPairGenerator.initialize(keyStrength);
@@ -57,7 +60,7 @@ public class PuttyKey {
 	}
 
 	/**
-	 * Create a DSA PuTTY key of given strength
+	 * Create a DSA PuTTY key of standard 1024 bit strength
 	 */
 	public PuttyKey(final String comment) throws Exception {
 		this.comment = comment;
@@ -68,14 +71,21 @@ public class PuttyKey {
 	/**
 	 * Create a ECDSA PuTTY key of eliptic curve name.
 	 * Supported eliptic curve names are
-	 *   nistp256
-	 *   nistp384
-	 *   nistp521
+	 *   nistp256 or secp256
+	 *   nistp384 or secp384
+	 *   nistp521 or secp521
 	 */
 	public PuttyKey(final String comment, final String ecdsaCurveName) throws Exception {
+		if (ecdsaCurveName == null || "".equals(ecdsaCurveName.trim())) {
+			throw new Exception("Missing ECDSA curve name parameter");
+		}
+		final String curveName = ecdsaCurveName.replace("nist", "sec").toLowerCase().trim();
+		if (!"sep256".equals(curveName) && !"secp384".equals(curveName) && !"secp521".equals(curveName)) {
+			throw new Exception("Unknown ECDSA curve name: " + ecdsaCurveName);
+		}
 		this.comment = comment;
 		final AlgorithmParameters parameters = AlgorithmParameters.getInstance("EC");
-		parameters.init(new ECGenParameterSpec(ecdsaCurveName.replace("nist", "sec") + "r1"));
+		parameters.init(new ECGenParameterSpec(curveName + "r1"));
 		final ECParameterSpec ecParameterSpec = parameters.getParameterSpec(ECParameterSpec.class);
 		final KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("EC");
 		keyPairGenerator.initialize(ecParameterSpec, new SecureRandom());
@@ -237,7 +247,7 @@ public class PuttyKey {
 		}
 	}
 
-	private String toHexString(final byte[] data, final String separator) {
+	private static String toHexString(final byte[] data, final String separator) {
 		final StringBuilder returnString = new StringBuilder();
 		for (final byte dataByte : data) {
 			if (returnString.length() > 0) {
@@ -361,7 +371,7 @@ public class PuttyKey {
 		private byte[] readData() throws IOException, Exception {
 			try {
 				final int nextBlockSize = keyDataInput.readInt();
-				if (nextBlockSize <= 0 || nextBlockSize > 513) {
+				if (nextBlockSize <= 0) {
 					throw new Exception("Key blocksize error. Maybe the key encrytion password was wrong");
 				}
 				final byte[] nextBlock = new byte[nextBlockSize];
@@ -392,7 +402,7 @@ public class PuttyKey {
 
 		private void writeData(final byte[] data) throws IOException, Exception {
 			try {
-				if (data.length <= 0 || data.length > 513) {
+				if (data.length <= 0) {
 					throw new Exception("Key blocksize error");
 				}
 

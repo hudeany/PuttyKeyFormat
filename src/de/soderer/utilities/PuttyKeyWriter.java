@@ -47,41 +47,6 @@ public class PuttyKeyWriter implements Closeable {
 	private static final String AES128_PemEncryptionMethodName = "AES-128-CBC";
 	private static final String TripleDES_PemEncryptionMethodName = "DES-EDE3-CBC";
 
-	/**
-	 * ASN.1 "INTEGER" (0x02 = 2)
-	 */
-	private static int DER_TAG_INTEGER = 0x02;
-
-	/**
-	 * ASN.1 "BIT STRING" (0x03 = 3)
-	 */
-	private static int DER_TAG_BIT_STRING = 0x03;
-
-	/**
-	 * ASN.1 "OCTET STRING" (0x04 = 4)
-	 */
-	private static int DER_TAG_OCTET_STRING = 0x04;
-
-	/**
-	 * ASN.1 "OBJECT" (0x06 = 6)
-	 */
-	private static int DER_TAG_OBJECT = 0x06;
-
-	/**
-	 * ASN.1 "SEQUENCE" (0x30 = 48)
-	 */
-	private static int DER_TAG_SEQUENCE = 0x30;
-
-	/**
-	 * ASN.1 CONTEXT SPECIFIC "cont [ 0 ]" (0xA0 = -96)
-	 */
-	private static int DER_TAG_CONTEXT_SPECIFIC_0 = 0xA0;
-
-	/**
-	 * ASN.1 CONTEXT SPECIFIC "cont [ 1 ]" (0xA1 = -95)
-	 */
-	private static int DER_TAG_CONTEXT_SPECIFIC_1 = 0xA1;
-
 	private final OutputStream outputStream;
 
 	public PuttyKeyWriter(final OutputStream outputStream) throws IOException {
@@ -101,7 +66,7 @@ public class PuttyKeyWriter implements Closeable {
 		final String macHash = calculateMacChecksum(passwordBytes, algorithmName, password == null ? "none" : "aes256-cbc", puttyKey.getComment(), publicKeyBytes, privateKeyBytes);
 
 		if (passwordBytes != null) {
-			final byte[] puttyKeyEncryptionKey = getPuttyPrivateKeyEncryptionKey(passwordBytes);
+			final byte[] puttyKeyEncryptionKey = stretchPasswordForPutty(passwordBytes);
 
 			final Cipher cipher = Cipher.getInstance("AES/CBC/NoPadding");
 			cipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(puttyKeyEncryptionKey, 0, 32, "AES"), new IvParameterSpec(new byte[16])); // initial vector=0
@@ -125,23 +90,7 @@ public class PuttyKeyWriter implements Closeable {
 		outputStream.write(content.toString().getBytes("ISO-8859-1"));
 	}
 
-	private byte[] addSecurePadding(byte[] data, final int paddingSize) {
-		if (data.length % paddingSize != 0) {
-			final byte[] dataPadded = new byte[((data.length / paddingSize) + 1) * paddingSize];
-			for (int i = 0; i < data.length; i++) {
-				dataPadded[i] = data[i];
-			}
-			final byte[] randomArray = new byte[dataPadded.length - data.length];
-			new SecureRandom().nextBytes(randomArray);
-			for (int i = 0; i < randomArray.length; i++) {
-				dataPadded[data.length + i] = randomArray[i];
-			}
-			data = dataPadded;
-		}
-		return data;
-	}
-
-	private static byte[] getPuttyPrivateKeyEncryptionKey(final byte[] passwordByteArray) throws NoSuchAlgorithmException {
+	private static byte[] stretchPasswordForPutty(final byte[] passwordByteArray) throws NoSuchAlgorithmException {
 		final byte[] puttyKeyEncryptionKey = new byte[32];
 		final MessageDigest digest = MessageDigest.getInstance("SHA-1");
 
@@ -297,7 +246,7 @@ public class PuttyKeyWriter implements Closeable {
 		outputStream.write(("\n-----END " + keyTypeName + "-----\n").getBytes("UTF-8"));
 	}
 
-	private String getPemHeaderLines(final Map<String, String> headers, final int maxLineLimit) {
+	private static String getPemHeaderLines(final Map<String, String> headers, final int maxLineLimit) {
 		final StringBuilder headerBuilder = new StringBuilder();
 		if (!headers.isEmpty()) {
 			for (final Entry<String, String> entry : headers.entrySet()) {
@@ -322,7 +271,7 @@ public class PuttyKeyWriter implements Closeable {
 		return headerBuilder.toString();
 	}
 
-	protected static byte[] stretchPasswordForOpenSsl(final String password, final byte[] iv, final int usingIvSize, final int keySize) throws Exception {
+	private static byte[] stretchPasswordForOpenSsl(final String password, final byte[] iv, final int usingIvSize, final int keySize) throws Exception {
 		final byte[] passphraseBytes = password.getBytes("ISO-8859-1");
 		final MessageDigest hash = MessageDigest.getInstance("MD5");
 		final byte[] key = new byte[keySize];
@@ -346,97 +295,51 @@ public class PuttyKeyWriter implements Closeable {
 		return key;
 	}
 
-	private byte[] createRsaBinaryKey(final PuttyKey puttyKey) throws Exception {
+	private static byte[] createRsaBinaryKey(final PuttyKey puttyKey) throws Exception {
 		final RSAPrivateCrtKey privateKey = ((RSAPrivateCrtKey) puttyKey.getKeyPair().getPrivate());
 
-		return createDerTagData(DER_TAG_SEQUENCE,
-				createDerTagData(DER_TAG_INTEGER, BigInteger.ZERO.toByteArray()),
-				createDerTagData(DER_TAG_INTEGER, privateKey.getModulus().toByteArray()),
-				createDerTagData(DER_TAG_INTEGER, privateKey.getPublicExponent().toByteArray()),
-				createDerTagData(DER_TAG_INTEGER, privateKey.getPrivateExponent().toByteArray()),
-				createDerTagData(DER_TAG_INTEGER, privateKey.getPrimeP().toByteArray()),
-				createDerTagData(DER_TAG_INTEGER, privateKey.getPrimeQ().toByteArray()),
-				createDerTagData(DER_TAG_INTEGER, privateKey.getPrimeExponentP().toByteArray()),
-				createDerTagData(DER_TAG_INTEGER, privateKey.getPrimeExponentQ().toByteArray()),
-				createDerTagData(DER_TAG_INTEGER, privateKey.getCrtCoefficient().toByteArray())
+		return Asn1Codec.createDerTagData(Asn1Codec.DER_TAG_SEQUENCE,
+				Asn1Codec.createDerTagData(Asn1Codec.DER_TAG_INTEGER, BigInteger.ZERO.toByteArray()),
+				Asn1Codec.createDerTagData(Asn1Codec.DER_TAG_INTEGER, privateKey.getModulus().toByteArray()),
+				Asn1Codec.createDerTagData(Asn1Codec.DER_TAG_INTEGER, privateKey.getPublicExponent().toByteArray()),
+				Asn1Codec.createDerTagData(Asn1Codec.DER_TAG_INTEGER, privateKey.getPrivateExponent().toByteArray()),
+				Asn1Codec.createDerTagData(Asn1Codec.DER_TAG_INTEGER, privateKey.getPrimeP().toByteArray()),
+				Asn1Codec.createDerTagData(Asn1Codec.DER_TAG_INTEGER, privateKey.getPrimeQ().toByteArray()),
+				Asn1Codec.createDerTagData(Asn1Codec.DER_TAG_INTEGER, privateKey.getPrimeExponentP().toByteArray()),
+				Asn1Codec.createDerTagData(Asn1Codec.DER_TAG_INTEGER, privateKey.getPrimeExponentQ().toByteArray()),
+				Asn1Codec.createDerTagData(Asn1Codec.DER_TAG_INTEGER, privateKey.getCrtCoefficient().toByteArray())
 				);
 	}
 
-	private byte[] createDssBinaryKey(final PuttyKey puttyKey) throws Exception {
+	private static byte[] createDssBinaryKey(final PuttyKey puttyKey) throws Exception {
 		final DSAPublicKey publicKey = ((DSAPublicKey) puttyKey.getKeyPair().getPublic());
 		final DSAPrivateKey privateKey = ((DSAPrivateKey) puttyKey.getKeyPair().getPrivate());
 
-		return createDerTagData(DER_TAG_SEQUENCE,
-				createDerTagData(DER_TAG_INTEGER, BigInteger.ZERO.toByteArray()),
-				createDerTagData(DER_TAG_INTEGER, privateKey.getParams().getP().toByteArray()),
-				createDerTagData(DER_TAG_INTEGER, privateKey.getParams().getQ().toByteArray()),
-				createDerTagData(DER_TAG_INTEGER, privateKey.getParams().getG().toByteArray()),
-				createDerTagData(DER_TAG_INTEGER, publicKey.getY().toByteArray()),
-				createDerTagData(DER_TAG_INTEGER, privateKey.getX().toByteArray())
+		return Asn1Codec.createDerTagData(Asn1Codec.DER_TAG_SEQUENCE,
+				Asn1Codec.createDerTagData(Asn1Codec.DER_TAG_INTEGER, BigInteger.ZERO.toByteArray()),
+				Asn1Codec.createDerTagData(Asn1Codec.DER_TAG_INTEGER, privateKey.getParams().getP().toByteArray()),
+				Asn1Codec.createDerTagData(Asn1Codec.DER_TAG_INTEGER, privateKey.getParams().getQ().toByteArray()),
+				Asn1Codec.createDerTagData(Asn1Codec.DER_TAG_INTEGER, privateKey.getParams().getG().toByteArray()),
+				Asn1Codec.createDerTagData(Asn1Codec.DER_TAG_INTEGER, publicKey.getY().toByteArray()),
+				Asn1Codec.createDerTagData(Asn1Codec.DER_TAG_INTEGER, privateKey.getX().toByteArray())
 				);
 	}
 
-	private byte[] createEcdsaBinaryKey(final PuttyKey puttyKey, final byte[] oidKey) throws Exception {
+	private static byte[] createEcdsaBinaryKey(final PuttyKey puttyKey, final byte[] oidKey) throws Exception {
 		final ECPrivateKey privateKey = ((ECPrivateKey) puttyKey.getKeyPair().getPrivate());
 		final ECPublicKey publicKey = ((ECPublicKey) puttyKey.getKeyPair().getPublic());
 
-		return createDerTagData(DER_TAG_SEQUENCE,
-				createDerTagData(DER_TAG_INTEGER, BigInteger.ONE.toByteArray()),
-				createDerTagData(DER_TAG_OCTET_STRING, privateKey.getS().toByteArray()),
-				createDerTagData(DER_TAG_CONTEXT_SPECIFIC_0, createDerTagData(DER_TAG_OBJECT, oidKey)),
-				createDerTagData(DER_TAG_CONTEXT_SPECIFIC_1, createDerTagData(DER_TAG_BIT_STRING,
+		return Asn1Codec.createDerTagData(Asn1Codec.DER_TAG_SEQUENCE,
+				Asn1Codec.createDerTagData(Asn1Codec.DER_TAG_INTEGER, BigInteger.ONE.toByteArray()),
+				Asn1Codec.createDerTagData(Asn1Codec.DER_TAG_OCTET_STRING, privateKey.getS().toByteArray()),
+				Asn1Codec.createDerTagData(Asn1Codec.DER_TAG_CONTEXT_SPECIFIC_0, Asn1Codec.createDerTagData(Asn1Codec.DER_TAG_OBJECT, oidKey)),
+				Asn1Codec.createDerTagData(Asn1Codec.DER_TAG_CONTEXT_SPECIFIC_1, Asn1Codec.createDerTagData(Asn1Codec.DER_TAG_BIT_STRING,
 						joinByteArrays(
 								new byte[] {0, 4},
 								publicKey.getW().getAffineX().toByteArray(),
 								publicKey.getW().getAffineY().toByteArray()))
 						)
 				);
-	}
-
-	/**
-	 * Converts byte array to base64 with linebreaks
-	 */
-	private static String toWrappedBase64(final byte[] byteArray, final int maxLineLength, final String lineBreak) {
-		return Base64.getMimeEncoder(maxLineLength, lineBreak.getBytes(Charset.forName("ISO-8859-1"))).encodeToString(byteArray);
-	}
-
-	private byte[] joinByteArrays(final byte[]... arrays) throws Exception {
-		final ByteArrayOutputStream out = new ByteArrayOutputStream();
-		for (final byte[] array : arrays) {
-			out.write(array);
-		}
-		return out.toByteArray();
-	}
-
-	private static byte[] createDerTagData(final int derTagId, final byte[]... derDataItems) throws IOException {
-		final ByteArrayOutputStream out = new ByteArrayOutputStream();
-		out.write(derTagId);
-		int dataItemsLength = 0;
-		for (final byte[] dataItem : derDataItems) {
-			dataItemsLength += dataItem.length;
-		}
-		if (dataItemsLength < 0x80) {
-			out.write(dataItemsLength);
-		} else {
-			final int bytes = getByteEncodedLength(dataItemsLength);
-			out.write(0x80 | bytes);
-			for (int i = bytes - 1; i >= 0; i--) {
-				out.write((dataItemsLength >> (8 * i)) & 0xFF);
-			}
-		}
-		for (final byte[] dataItem : derDataItems) {
-			out.write(dataItem);
-		}
-		return out.toByteArray();
-	}
-
-	private static int getByteEncodedLength(int value) {
-		int lengthInBytes = 0;
-		while (value > 0) {
-			lengthInBytes++;
-			value >>= 8;
-		}
-		return lengthInBytes;
 	}
 
 	private static String calculateMacChecksum(final byte[] passwordBytes, final String keyType, final String encryptionType, final String comment, final byte[] publicKey, final byte[] privateKey) throws Exception {
@@ -472,6 +375,37 @@ public class PuttyKeyWriter implements Closeable {
 		data.write(privateKey);
 
 		return toHexString(mac.doFinal(out.toByteArray())).toLowerCase();
+	}
+
+	private static byte[] addSecurePadding(byte[] data, final int paddingSize) {
+		if (data.length % paddingSize != 0) {
+			final byte[] dataPadded = new byte[((data.length / paddingSize) + 1) * paddingSize];
+			for (int i = 0; i < data.length; i++) {
+				dataPadded[i] = data[i];
+			}
+			final byte[] randomArray = new byte[dataPadded.length - data.length];
+			new SecureRandom().nextBytes(randomArray);
+			for (int i = 0; i < randomArray.length; i++) {
+				dataPadded[data.length + i] = randomArray[i];
+			}
+			data = dataPadded;
+		}
+		return data;
+	}
+
+	/**
+	 * Converts byte array to base64 with linebreaks
+	 */
+	private static String toWrappedBase64(final byte[] byteArray, final int maxLineLength, final String lineBreak) {
+		return Base64.getMimeEncoder(maxLineLength, lineBreak.getBytes(Charset.forName("ISO-8859-1"))).encodeToString(byteArray);
+	}
+
+	private static byte[] joinByteArrays(final byte[]... arrays) throws Exception {
+		final ByteArrayOutputStream out = new ByteArrayOutputStream();
+		for (final byte[] array : arrays) {
+			out.write(array);
+		}
+		return out.toByteArray();
 	}
 
 	private static String toHexString(final byte[] data) {
