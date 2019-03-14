@@ -3,15 +3,11 @@ package de.soderer.utilities.test;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 
-import org.junit.Test;
-
 import de.soderer.utilities.PuttyKey;
-import de.soderer.utilities.PuttyKeyOpenSshHelper;
 import de.soderer.utilities.PuttyKeyReader;
 import de.soderer.utilities.PuttyKeyWriter;
 
 public class PuttyKeyTest {
-	@Test
 	public void test() throws Exception {
 		final PuttyKey puttyKey = new PuttyKey("TestKey", 2048);
 
@@ -39,8 +35,11 @@ public class PuttyKeyTest {
 			throw new Exception();
 		}
 
-		final String pemString = PuttyKeyOpenSshHelper.convertPuttyKeyToProtectedPrivateOpenSshKey(puttyKey, "password");
-		if (pemString == null || pemString.length() == 0) {
+		final ByteArrayOutputStream output3 = new ByteArrayOutputStream();
+		try (PuttyKeyWriter puttyKeyWriter = new PuttyKeyWriter(output3)) {
+			puttyKeyWriter.writeProtectedPemFormat(puttyKey, "DES-EDE3-CBC", "password");
+		}
+		if (output3.toByteArray() == null || output3.toByteArray().length == 0) {
 			throw new Exception();
 		}
 	}

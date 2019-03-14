@@ -18,6 +18,9 @@ import java.security.interfaces.ECPrivateKey;
 import java.security.interfaces.ECPublicKey;
 import java.security.interfaces.RSAPrivateCrtKey;
 import java.util.Base64;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Map.Entry;
 
 import javax.crypto.Cipher;
 import javax.crypto.Mac;
@@ -41,6 +44,9 @@ import javax.xml.ws.WebServiceException;
  * </pre>
  */
 public class PuttyKeyWriter implements Closeable {
+	private static final String AES128_PemEncryptionMethodName = "AES-128-CBC";
+	private static final String TripleDES_PemEncryptionMethodName = "DES-EDE3-CBC";
+
 	/**
 	 * ASN.1 "INTEGER" (0x02 = 2)
 	 */
@@ -76,10 +82,6 @@ public class PuttyKeyWriter implements Closeable {
 	 */
 	private static int DER_TAG_CONTEXT_SPECIFIC_1 = 0xA1;
 
-	private static byte[] OBJECT_IDENTIFIER_secp256r1 = new byte[] { 42, -122, 72, -50, 61, 3, 1, 7 };
-	private static byte[] OBJECT_IDENTIFIER_secp384r1 = new byte[] { 43, -127, 4, 0, 34 };
-	private static byte[] OBJECT_IDENTIFIER_secp521r1 = new byte[] { 43, -127, 4, 0, 35 };
-
 	private final OutputStream outputStream;
 
 	public PuttyKeyWriter(final OutputStream outputStream) throws IOException {
@@ -94,18 +96,7 @@ public class PuttyKeyWriter implements Closeable {
 		byte[] privateKeyBytes = puttyKey.getPrivateKeyBytes();
 
 		// padding up to multiple of 16 bytes for AES/CBC/NoPadding encryption
-		if (passwordBytes != null && privateKeyBytes.length % 16 != 0) {
-			final byte[] privateKeyBytesPadded = new byte[((privateKeyBytes.length / 16) + 1) * 16];
-			for (int i = 0; i < privateKeyBytes.length; i++) {
-				privateKeyBytesPadded[i] = privateKeyBytes[i];
-			}
-			final byte[] randomArray = new byte[privateKeyBytesPadded.length - privateKeyBytes.length];
-			new SecureRandom().nextBytes(randomArray);
-			for (int i = 0; i < randomArray.length; i++) {
-				privateKeyBytesPadded[privateKeyBytes.length + i] = randomArray[i];
-			}
-			privateKeyBytes = privateKeyBytesPadded;
-		}
+		privateKeyBytes = addSecurePadding(privateKeyBytes, 16);
 
 		final String macHash = calculateMacChecksum(passwordBytes, algorithmName, password == null ? "none" : "aes256-cbc", puttyKey.getComment(), publicKeyBytes, privateKeyBytes);
 
@@ -118,8 +109,8 @@ public class PuttyKeyWriter implements Closeable {
 			privateKeyBytes = cipher.doFinal(privateKeyBytes);
 		}
 
-		final String publicKeyBase64 = toWrappedBase64(publicKeyBytes, "\r\n");
-		final String privateKeyBase64 = toWrappedBase64(privateKeyBytes, "\r\n");
+		final String publicKeyBase64 = toWrappedBase64(publicKeyBytes, 64, "\r\n");
+		final String privateKeyBase64 = toWrappedBase64(privateKeyBytes, 64, "\r\n");
 
 		final StringBuilder content = new StringBuilder();
 		content.append("PuTTY-User-Key-File-2: ").append(algorithmName).append("\r\n");
@@ -132,6 +123,22 @@ public class PuttyKeyWriter implements Closeable {
 		content.append("Private-MAC: ").append(macHash);
 
 		outputStream.write(content.toString().getBytes("ISO-8859-1"));
+	}
+
+	private byte[] addSecurePadding(byte[] data, final int paddingSize) {
+		if (data.length % paddingSize != 0) {
+			final byte[] dataPadded = new byte[((data.length / paddingSize) + 1) * paddingSize];
+			for (int i = 0; i < data.length; i++) {
+				dataPadded[i] = data[i];
+			}
+			final byte[] randomArray = new byte[dataPadded.length - data.length];
+			new SecureRandom().nextBytes(randomArray);
+			for (int i = 0; i < randomArray.length; i++) {
+				dataPadded[data.length + i] = randomArray[i];
+			}
+			data = dataPadded;
+		}
+		return data;
 	}
 
 	private static byte[] getPuttyPrivateKeyEncryptionKey(final byte[] passwordByteArray) throws NoSuchAlgorithmException {
@@ -163,11 +170,11 @@ public class PuttyKeyWriter implements Closeable {
 		} else if (PuttyKey.SSH_CIPHER_NAME_DSA.equalsIgnoreCase(algorithmName)) {
 			outputStream.write(createDssBinaryKey(puttyKey));
 		} else if (PuttyKey.SSH_CIPHER_NAME_ECDSA_NISTP256.equalsIgnoreCase(algorithmName)) {
-			outputStream.write(createEcdsaBinaryKey(puttyKey, OBJECT_IDENTIFIER_secp256r1));
+			outputStream.write(createEcdsaBinaryKey(puttyKey, OID.SECP256R1_ARRAY));
 		} else if (PuttyKey.SSH_CIPHER_NAME_ECDSA_NISTP384.equalsIgnoreCase(algorithmName)) {
-			outputStream.write(createEcdsaBinaryKey(puttyKey, OBJECT_IDENTIFIER_secp384r1));
+			outputStream.write(createEcdsaBinaryKey(puttyKey, OID.SECP384R1_ARRAY));
 		} else if (PuttyKey.SSH_CIPHER_NAME_ECDSA_NISTP521.equalsIgnoreCase(algorithmName)) {
-			outputStream.write(createEcdsaBinaryKey(puttyKey, OBJECT_IDENTIFIER_secp521r1));
+			outputStream.write(createEcdsaBinaryKey(puttyKey, OID.SECP521R1_ARRAY));
 		} else {
 			throw new IllegalArgumentException("Unsupported cipher: " + algorithmName);
 		}
@@ -182,32 +189,161 @@ public class PuttyKeyWriter implements Closeable {
 		final String algorithmName = puttyKey.getAlgorithm();
 		if (PuttyKey.SSH_CIPHER_NAME_RSA.equalsIgnoreCase(algorithmName)) {
 			outputStream.write("-----BEGIN RSA PRIVATE KEY-----\n".getBytes("ISO-8859-1"));
-			outputStream.write(toWrappedBase64(createRsaBinaryKey(puttyKey), "\n").getBytes("ISO-8859-1"));
-			outputStream.write("\n".getBytes("ISO-8859-1"));
-			outputStream.write("-----END RSA PRIVATE KEY-----\n".getBytes("ISO-8859-1"));
+			outputStream.write(toWrappedBase64(createRsaBinaryKey(puttyKey), 64, "\n").getBytes("ISO-8859-1"));
+			outputStream.write("\n-----END RSA PRIVATE KEY-----\n".getBytes("ISO-8859-1"));
 		} else if (PuttyKey.SSH_CIPHER_NAME_DSA.equalsIgnoreCase(algorithmName)) {
 			outputStream.write("-----BEGIN DSA PRIVATE KEY-----\n".getBytes("ISO-8859-1"));
-			outputStream.write(toWrappedBase64(createDssBinaryKey(puttyKey), "\n").getBytes("ISO-8859-1"));
-			outputStream.write("\n".getBytes("ISO-8859-1"));
-			outputStream.write("-----END DSA PRIVATE KEY-----\n".getBytes("ISO-8859-1"));
+			outputStream.write(toWrappedBase64(createDssBinaryKey(puttyKey), 64, "\n").getBytes("ISO-8859-1"));
+			outputStream.write("\n-----END DSA PRIVATE KEY-----\n".getBytes("ISO-8859-1"));
 		} else if (PuttyKey.SSH_CIPHER_NAME_ECDSA_NISTP256.equalsIgnoreCase(algorithmName)) {
 			outputStream.write("-----BEGIN EC PRIVATE KEY-----\n".getBytes("ISO-8859-1"));
-			outputStream.write(toWrappedBase64(createEcdsaBinaryKey(puttyKey, OBJECT_IDENTIFIER_secp256r1), "\n").getBytes("ISO-8859-1"));
-			outputStream.write("\n".getBytes("ISO-8859-1"));
-			outputStream.write("-----END EC PRIVATE KEY-----\n".getBytes("ISO-8859-1"));
+			outputStream.write(toWrappedBase64(createEcdsaBinaryKey(puttyKey, OID.SECP256R1_ARRAY), 64, "\n").getBytes("ISO-8859-1"));
+			outputStream.write("\n-----END EC PRIVATE KEY-----\n".getBytes("ISO-8859-1"));
 		} else if (PuttyKey.SSH_CIPHER_NAME_ECDSA_NISTP384.equalsIgnoreCase(algorithmName)) {
 			outputStream.write("-----BEGIN EC PRIVATE KEY-----\n".getBytes("ISO-8859-1"));
-			outputStream.write(toWrappedBase64(createEcdsaBinaryKey(puttyKey, OBJECT_IDENTIFIER_secp384r1), "\n").getBytes("ISO-8859-1"));
-			outputStream.write("\n".getBytes("ISO-8859-1"));
-			outputStream.write("-----END EC PRIVATE KEY-----\n".getBytes("ISO-8859-1"));
+			outputStream.write(toWrappedBase64(createEcdsaBinaryKey(puttyKey, OID.SECP384R1_ARRAY), 64, "\n").getBytes("ISO-8859-1"));
+			outputStream.write("\n-----END EC PRIVATE KEY-----\n".getBytes("ISO-8859-1"));
 		} else if (PuttyKey.SSH_CIPHER_NAME_ECDSA_NISTP521.equalsIgnoreCase(algorithmName)) {
 			outputStream.write("-----BEGIN EC PRIVATE KEY-----\n".getBytes("ISO-8859-1"));
-			outputStream.write(toWrappedBase64(createEcdsaBinaryKey(puttyKey, OBJECT_IDENTIFIER_secp521r1), "\n").getBytes("ISO-8859-1"));
-			outputStream.write("\n".getBytes("ISO-8859-1"));
-			outputStream.write("-----END EC PRIVATE KEY-----\n".getBytes("ISO-8859-1"));
+			outputStream.write(toWrappedBase64(createEcdsaBinaryKey(puttyKey, OID.SECP521R1_ARRAY), 64, "\n").getBytes("ISO-8859-1"));
+			outputStream.write("\n-----END EC PRIVATE KEY-----\n".getBytes("ISO-8859-1"));
 		} else {
 			throw new IllegalArgumentException("Unsupported cipher: " + algorithmName);
 		}
+	}
+
+	/**
+	 * Converts this key into protected PEM format (PKCS#8) for OpenSSH keys<br />
+	 * Using default encryption method "AES-128-CBC"<br />
+	 * This format includes private and public key data and is accepted by PuTTY's key import<br />
+	 */
+	public void writeProtectedPemFormat(final PuttyKey puttyKey, final String exportedKeyPassword) throws Exception {
+		writeProtectedPemFormat(puttyKey, null, exportedKeyPassword);
+	}
+
+	/**
+	 * Converts this key into protected PEM format (PKCS#8) for OpenSSH keys<br />
+	 * This format includes private and public key data and is accepted by PuTTY's key import<br />
+	 * <br />
+	 * keyEncryptionCipherName:<br />
+	 *   default is "AES-128-CBC"<br />
+	 *   other value may be "DES-EDE3-CBC"<br />
+	 */
+	public void writeProtectedPemFormat(final PuttyKey puttyKey, String keyEncryptionCipherName, final String exportedKeyPassword) throws Exception {
+		if (keyEncryptionCipherName == null || "".equals(keyEncryptionCipherName.trim())) {
+			keyEncryptionCipherName = AES128_PemEncryptionMethodName;
+		}
+
+		if (!AES128_PemEncryptionMethodName.equalsIgnoreCase(keyEncryptionCipherName) && !TripleDES_PemEncryptionMethodName.equalsIgnoreCase(keyEncryptionCipherName)) {
+			throw new Exception("Unknown key encryption cipher: " + keyEncryptionCipherName);
+		}
+
+		if (exportedKeyPassword == null || "".equals(exportedKeyPassword)) {
+			throw new Exception("Mandatory password is missing");
+		}
+
+		String keyTypeName;
+		byte[] keyData;
+		final String algorithmName = puttyKey.getAlgorithm();
+		if (PuttyKey.SSH_CIPHER_NAME_RSA.equalsIgnoreCase(algorithmName)) {
+			keyTypeName = "RSA PRIVATE KEY";
+			keyData = createRsaBinaryKey(puttyKey);
+		} else if (PuttyKey.SSH_CIPHER_NAME_DSA.equalsIgnoreCase(algorithmName)) {
+			keyTypeName = "DSA PRIVATE KEY";
+			keyData = createDssBinaryKey(puttyKey);
+		} else if (PuttyKey.SSH_CIPHER_NAME_ECDSA_NISTP256.equalsIgnoreCase(algorithmName)) {
+			keyTypeName = "EC PRIVATE KEY";
+			keyData = createEcdsaBinaryKey(puttyKey, OID.SECP256R1_ARRAY);
+		} else if (PuttyKey.SSH_CIPHER_NAME_ECDSA_NISTP384.equalsIgnoreCase(algorithmName)) {
+			keyTypeName = "EC PRIVATE KEY";
+			keyData = createEcdsaBinaryKey(puttyKey, OID.SECP384R1_ARRAY);
+		} else if (PuttyKey.SSH_CIPHER_NAME_ECDSA_NISTP521.equalsIgnoreCase(algorithmName)) {
+			keyTypeName = "EC PRIVATE KEY";
+			keyData = createEcdsaBinaryKey(puttyKey, OID.SECP521R1_ARRAY);
+		} else {
+			throw new IllegalArgumentException("Unsupported cipher: " + algorithmName);
+		}
+
+		final Map<String, String> headers = new LinkedHashMap<>();
+
+		final SecureRandom rnd = new SecureRandom();
+		final Cipher cipher;
+		final String ivString;
+		if (TripleDES_PemEncryptionMethodName.equalsIgnoreCase(keyEncryptionCipherName)) {
+			final byte[] iv = new byte[8];
+			rnd.nextBytes(iv);
+			ivString = toHexString(iv);
+			cipher = Cipher.getInstance("DESede/CBC/NoPadding");
+			cipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(stretchPasswordForOpenSsl(exportedKeyPassword, iv, 8, 24), "DESede"), new IvParameterSpec(iv));
+			keyData = addSecurePadding(keyData, 16);
+		} else if (AES128_PemEncryptionMethodName.equalsIgnoreCase(keyEncryptionCipherName)) {
+			final byte[] iv = new byte[16];
+			rnd.nextBytes(iv);
+			ivString = toHexString(iv);
+			cipher = Cipher.getInstance("AES/CBC/NoPadding");
+			cipher.init(Cipher.ENCRYPT_MODE, new SecretKeySpec(stretchPasswordForOpenSsl(exportedKeyPassword, iv, 8, 16), "AES"), new IvParameterSpec(iv));
+			keyData = addSecurePadding(keyData, 16);
+		} else {
+			throw new Exception("Unknown key encryption cipher: " + keyEncryptionCipherName);
+		}
+		headers.put("Proc-Type", "4,ENCRYPTED");
+		headers.put("DEK-Info", keyEncryptionCipherName.toUpperCase() + "," + ivString);
+
+		final byte[] encryptedKeyData = cipher.doFinal(keyData);
+
+		outputStream.write(("-----BEGIN " + keyTypeName + "-----\n").getBytes("UTF-8"));
+		outputStream.write(getPemHeaderLines(headers, 76).getBytes("UTF-8"));
+		outputStream.write(toWrappedBase64(encryptedKeyData, 76, "\n").getBytes("UTF-8"));
+		outputStream.write(("\n-----END " + keyTypeName + "-----\n").getBytes("UTF-8"));
+	}
+
+	private String getPemHeaderLines(final Map<String, String> headers, final int maxLineLimit) {
+		final StringBuilder headerBuilder = new StringBuilder();
+		if (!headers.isEmpty()) {
+			for (final Entry<String, String> entry : headers.entrySet()) {
+				headerBuilder.append(entry.getKey() + ": ");
+				if ((entry.getKey().length() + entry.getValue().length() + 2) > maxLineLimit) {
+					int offset = Math.max(maxLineLimit - entry.getKey().length() - 2, 0);
+					headerBuilder.append(entry.getValue().substring(0, offset) + "\\" + "\n");
+					for (; offset < entry.getValue().length(); offset += maxLineLimit) {
+						if ((offset + maxLineLimit) >= entry.getValue().length()) {
+							headerBuilder.append(entry.getValue().substring(offset) + "\n");
+						} else {
+							headerBuilder.append(entry.getValue().substring(offset, offset + maxLineLimit) + "\\" + "\n");
+						}
+					}
+				} else {
+					headerBuilder.append(entry.getValue() + "\n");
+				}
+			}
+
+			headerBuilder.append("\n");
+		}
+		return headerBuilder.toString();
+	}
+
+	protected static byte[] stretchPasswordForOpenSsl(final String password, final byte[] iv, final int usingIvSize, final int keySize) throws Exception {
+		final byte[] passphraseBytes = password.getBytes("UTF-8");
+		final MessageDigest hash = MessageDigest.getInstance("MD5");
+		final byte[] key = new byte[keySize];
+		int hashesSize = keySize & 0XFFFFFFF0;
+
+		if ((keySize & 0XF) != 0) {
+			hashesSize += 0x10;
+		}
+
+		final byte[] hashes = new byte[hashesSize];
+		byte[] previous;
+		for (int index = 0; (index + 0x10) <= hashes.length; hash.update(previous, 0, previous.length)) {
+			hash.update(passphraseBytes, 0, passphraseBytes.length);
+			hash.update(iv, 0, usingIvSize);
+			previous = hash.digest();
+			System.arraycopy(previous, 0, hashes, index, previous.length);
+			index += previous.length;
+		}
+
+		System.arraycopy(hashes, 0, key, 0, key.length);
+		return key;
 	}
 
 	private byte[] createRsaBinaryKey(final PuttyKey puttyKey) throws Exception {
@@ -240,10 +376,10 @@ public class PuttyKeyWriter implements Closeable {
 				);
 	}
 
-	private byte[] createEcdsaBinaryKey(final PuttyKey puttyKey, byte[] oidKey) throws Exception {
+	private byte[] createEcdsaBinaryKey(final PuttyKey puttyKey, final byte[] oidKey) throws Exception {
 		final ECPrivateKey privateKey = ((ECPrivateKey) puttyKey.getKeyPair().getPrivate());
 		final ECPublicKey publicKey = ((ECPublicKey) puttyKey.getKeyPair().getPublic());
-		
+
 		return createDerTagData(DER_TAG_SEQUENCE,
 				createDerTagData(DER_TAG_INTEGER, BigInteger.ONE.toByteArray()),
 				createDerTagData(DER_TAG_OCTET_STRING, privateKey.getS().toByteArray()),
@@ -258,10 +394,10 @@ public class PuttyKeyWriter implements Closeable {
 	}
 
 	/**
-	 * Converts byte array to base64 with 64 chars per line
+	 * Converts byte array to base64 with linebreaks
 	 */
-	private static String toWrappedBase64(final byte[] byteArray, final String lineBreak) {
-		return Base64.getMimeEncoder(64, lineBreak.getBytes(Charset.forName("ISO-8859-1"))).encodeToString(byteArray);
+	private static String toWrappedBase64(final byte[] byteArray, final int maxLineLength, final String lineBreak) {
+		return Base64.getMimeEncoder(maxLineLength, lineBreak.getBytes(Charset.forName("ISO-8859-1"))).encodeToString(byteArray);
 	}
 
 	private byte[] joinByteArrays(final byte[]... arrays) throws Exception {
