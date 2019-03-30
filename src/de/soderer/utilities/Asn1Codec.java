@@ -6,6 +6,9 @@ import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * Encoder / Decoder for the ASN.1 format
@@ -76,13 +79,13 @@ public class Asn1Codec {
 
 			final int nextBlockSize = blockDataInput.readInt();
 			if (nextBlockSize <= 0 || nextBlockSize > 513) {
-				throw new Exception("Key blocksize error");
+				throw new Exception("Blocksize error");
 			}
 			final byte[] nextBlock = new byte[nextBlockSize];
 			blockDataInput.readFully(nextBlock);
 			return new BigInteger(nextBlock);
 		} catch (final IOException e) {
-			throw new Exception("Key block read error", e);
+			throw new Exception("Block read error", e);
 		}
 	}
 
@@ -115,5 +118,94 @@ public class Asn1Codec {
 			value >>= 8;
 		}
 		return lengthInBytes;
+	}
+
+	public static DerTag readDerTag(final byte[] data) throws Exception {
+		try {
+			final ByteArrayInputStream input = new ByteArrayInputStream(data);
+
+			final int tagId = input.read();
+
+			int tagLength;
+			final int lengthIndicatingValue = input.read();
+			if (lengthIndicatingValue < 0x80) {
+				tagLength = lengthIndicatingValue;
+			} else {
+				final int tagLengthBytesCount = lengthIndicatingValue - 0x80;
+				tagLength = 0;
+				for (int i = 0; i < tagLengthBytesCount; i++) {
+					final int nextValue = input.read();
+					tagLength = (tagLength << 8) + nextValue;
+				}
+			}
+
+			final byte[] dataBlock = new byte[tagLength];
+			input.read(dataBlock);
+
+			return new DerTag(tagId, dataBlock);
+		} catch (final IOException e) {
+			throw new Exception("Block read error", e);
+		}
+	}
+
+	public static List<DerTag> readDerTags(final byte[] data) throws Exception {
+		try {
+			final ByteArrayInputStream input = new ByteArrayInputStream(data);
+			final List<DerTag> returnList = new ArrayList<>();
+			while (input.available() > 0) {
+				final int tagId = input.read();
+
+				int tagLength;
+				final int lengthIndicatingValue = input.read();
+				if (lengthIndicatingValue < 0x80) {
+					tagLength = lengthIndicatingValue;
+				} else {
+					final int tagLengthBytesCount = lengthIndicatingValue & 0x7F;
+					tagLength = 0;
+					for (int i = 0; i < tagLengthBytesCount; i++) {
+						tagLength = (tagLength << 8) + input.read();
+					}
+				}
+
+				final byte[] dataBlock = new byte[tagLength];
+				input.read(dataBlock);
+
+				returnList.add(new DerTag(tagId, dataBlock));
+			}
+			return returnList;
+		} catch (final IOException e) {
+			throw new Exception("Block read error", e);
+		}
+	}
+
+	public static class DerTag {
+		int tagId;
+		byte[] data;
+
+		public DerTag(final int tagId, final byte[] data) {
+			this.tagId = tagId;
+			this.data = data;
+		}
+
+		public int getTagId() {
+			return tagId;
+		}
+
+		public void setTagId(final int tagId) {
+			this.tagId = tagId;
+		}
+
+		public byte[] getData() {
+			return data;
+		}
+
+		public void setData(final byte[] data) {
+			this.data = data;
+		}
+
+		@Override
+		public String toString() {
+			return tagId + " (length " + data.length + "): " + Arrays.toString(data);
+		}
 	}
 }

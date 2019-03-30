@@ -42,7 +42,6 @@ import javax.crypto.spec.SecretKeySpec;
  */
 public class PuttyKeyReader implements Closeable {
 	private final BufferedReader dataReader;
-	private byte[] passwordByteArray = null;
 
 	public static boolean isPuTTYKeyFile(final File ppkFile) throws IOException {
 		try (BufferedReader puttKeyReader = new BufferedReader(new FileReader(ppkFile))) {
@@ -60,24 +59,25 @@ public class PuttyKeyReader implements Closeable {
 		dataReader = new BufferedReader(new InputStreamReader(inputStream, "ISO-8859-1"));
 	}
 
-	public PuttyKeyReader setPassword(final char[] passwordCharArray) {
-		final CharBuffer charBuffer = CharBuffer.wrap(passwordCharArray);
-		final ByteBuffer byteBuffer = Charset.forName("ISO-8859-1").encode(charBuffer);
-		passwordByteArray = Arrays.copyOfRange(byteBuffer.array(), byteBuffer.position(), byteBuffer.limit());
+	public PuttyKey readKey(final char[] password) throws Exception {
+		final byte[] passwordByteArray;
+		if (password != null && password.length > 0)  {
+			final CharBuffer charBuffer = CharBuffer.wrap(password);
+			final ByteBuffer byteBuffer = Charset.forName("ISO-8859-1").encode(charBuffer);
+			passwordByteArray = Arrays.copyOfRange(byteBuffer.array(), byteBuffer.position(), byteBuffer.limit());
+		} else {
+			passwordByteArray = null;
+		}
 
-		return this;
-	}
-
-	public PuttyKey readKey() throws Exception {
 		final Map<String, String> headers = new HashMap<>();
 		final Map<String, StringBuilder> data = new HashMap<>();
 		String latestHeaderName = null;
 		String nextLine;
 		while ((nextLine = dataReader.readLine()) != null) {
-			final int indexOfHeaderSeparatore = nextLine.indexOf(": ");
-			if (indexOfHeaderSeparatore > 0) {
-				final String headerName = nextLine.substring(0, indexOfHeaderSeparatore).trim();
-				headers.put(headerName, nextLine.substring(indexOfHeaderSeparatore + 2));
+			final int indexOfHeaderSeparator = nextLine.indexOf(": ");
+			if (indexOfHeaderSeparator > 0) {
+				final String headerName = nextLine.substring(0, indexOfHeaderSeparator).trim();
+				headers.put(headerName, nextLine.substring(indexOfHeaderSeparator + 2));
 				latestHeaderName = headerName;
 			} else {
 				if (!data.containsKey(latestHeaderName)) {
@@ -104,34 +104,38 @@ public class PuttyKeyReader implements Closeable {
 		if (chipherName == null || "".equals(chipherName)) {
 			throw new Exception("Missing cipher name");
 		}
-		if (!PuttyKey.SSH_CIPHER_NAME_RSA.equalsIgnoreCase(chipherName)
-				&& !PuttyKey.SSH_CIPHER_NAME_DSA.equalsIgnoreCase(chipherName)
-				&& !PuttyKey.SSH_CIPHER_NAME_ECDSA_NISTP256.equalsIgnoreCase(chipherName)
-				&& !PuttyKey.SSH_CIPHER_NAME_ECDSA_NISTP384.equalsIgnoreCase(chipherName)
-				&& !PuttyKey.SSH_CIPHER_NAME_ECDSA_NISTP521.equalsIgnoreCase(chipherName)) {
+		if (!KeyPairUtilities.SSH_ALGORITHM_NAME_RSA.equalsIgnoreCase(chipherName)
+				&& !KeyPairUtilities.SSH_ALGORITHM_NAME_DSA.equalsIgnoreCase(chipherName)
+				&& !KeyPairUtilities.SSH_ALGORITHM_NAME_ECDSA_NISTP256.equalsIgnoreCase(chipherName)
+				&& !KeyPairUtilities.SSH_ALGORITHM_NAME_ECDSA_NISTP384.equalsIgnoreCase(chipherName)
+				&& !KeyPairUtilities.SSH_ALGORITHM_NAME_ECDSA_NISTP521.equalsIgnoreCase(chipherName)) {
 			throw new Exception("Unsupported chipher: " + chipherName);
 		}
 
 		final Decoder base64Decoder = Base64.getDecoder();
+
 		final byte[] publicKey = base64Decoder.decode(data.get("Public-Lines").toString());
-		byte[] privateKey = base64Decoder.decode(data.get("Private-Lines").toString());
 
 		final String encryptionMethod = headers.get("Encryption");
-		if ("aes256-cbc".equalsIgnoreCase(encryptionMethod)) {
+
+		final byte[] privateKey;
+		if (encryptionMethod == null || "".equals(encryptionMethod) || "none".equalsIgnoreCase(encryptionMethod)) {
+			privateKey = base64Decoder.decode(data.get("Private-Lines").toString());
+		} else if ("aes256-cbc".equalsIgnoreCase(encryptionMethod)) {
+			if (passwordByteArray == null) {
+				throw new WrongPasswordException();
+			}
 			try {
-				if (passwordByteArray == null) {
-					throw new Exception("Key decryption password is needed");
-				}
 				final byte[] puttyKeyEncryptionKey = getPuttyPrivateKeyEncryptionKey(passwordByteArray);
 
 				final Cipher cipher = Cipher.getInstance("AES/CBC/NoPadding");
 				cipher.init(Cipher.DECRYPT_MODE, new SecretKeySpec(puttyKeyEncryptionKey, 0, 32, "AES"), new IvParameterSpec(new byte[16])); // initial vector=0
 
-				privateKey = cipher.doFinal(privateKey);
+				privateKey = cipher.doFinal(base64Decoder.decode(data.get("Private-Lines").toString()));
 			} catch (final Exception e) {
 				throw new Exception("Cannot decrypt PuTTY private key data", e);
 			}
-		} else if (encryptionMethod != null && !"".equals(encryptionMethod) && !"none".equalsIgnoreCase(encryptionMethod)) {
+		} else {
 			throw new Exception("Unsupported key encryption method: " + headers.get("Encryption"));
 		}
 
@@ -139,8 +143,10 @@ public class PuttyKeyReader implements Closeable {
 			final String calculatedMacChecksum = calculateMacChecksum(passwordByteArray, headers.get("PuTTY-User-Key-File-2"), headers.get("Encryption"), headers.get("Comment"), publicKey, privateKey);
 			final String foundMacChecksum = headers.get("Private-MAC");
 			if (foundMacChecksum == null || !foundMacChecksum.equalsIgnoreCase(calculatedMacChecksum)) {
-				throw new Exception("PuTTY key was tampered or password is wrong: Private-MAC hash is invalid");
+				throw new WrongPasswordException();
 			}
+		} catch (final WrongPasswordException e) {
+			throw e;
 		} catch (final Exception e) {
 			throw new Exception("Invalid PuTTY key data: " + e.getMessage(), e);
 		}
