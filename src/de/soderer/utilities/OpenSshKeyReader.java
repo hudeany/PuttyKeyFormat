@@ -1,10 +1,7 @@
 package de.soderer.utilities;
 
 import java.io.BufferedReader;
-import java.io.ByteArrayInputStream;
 import java.io.Closeable;
-import java.io.DataInput;
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -56,39 +53,30 @@ public class OpenSshKeyReader implements Closeable {
 		Map<String, String> currentKeyHeaders = null;
 		StringBuilder currentKeyData = null;
 		String nextLine;
-		boolean withinKeyData = false;
 		while ((nextLine = dataReader.readLine()) != null) {
 			if (nextLine.startsWith("-----BEGIN ") && nextLine.endsWith("-----")) {
-				if (withinKeyData) {
+				if (currentKeyName != null) {
 					throw new Exception("Invalid keydata found");
 				}
-				withinKeyData = true;
 				currentKeyName = nextLine.substring(11, nextLine.length() - 5);
 				currentKeyHeaders = new HashMap<>();
 				currentKeyData = new StringBuilder();
 			} else if (nextLine.equals("---- BEGIN SSH2 PUBLIC KEY ----")) {
-				if (withinKeyData) {
+				if (currentKeyName != null) {
 					throw new Exception("Invalid keydata found");
 				}
-				withinKeyData = true;
 				currentKeyName = "SSH2 PUBLIC KEY";
 				currentKeyHeaders = new HashMap<>();
 				currentKeyData = new StringBuilder();
 			} else if (nextLine.equals("---- BEGIN SSH2 PRIVATE KEY ----")) {
-				if (withinKeyData) {
+				if (currentKeyName != null) {
 					throw new Exception("Invalid keydata found");
 				}
-				withinKeyData = true;
 				currentKeyName = "SSH2 PRIVATE KEY";
 				currentKeyHeaders = new HashMap<>();
 				currentKeyData = new StringBuilder();
-			} else if ((nextLine.startsWith("-----END ") && nextLine.endsWith("-----")) || (nextLine.startsWith("---- END ") && nextLine.endsWith(" ----"))) {
-				if (!withinKeyData) {
-					throw new Exception("Invalid keydata found");
-				}
-				withinKeyData = false;
-				final String endKeyName = nextLine.substring(9, nextLine.length() - 5);
-				if (currentKeyName == null || !currentKeyName.equals(endKeyName)) {
+			} else if ((nextLine.startsWith("---- END ") && nextLine.endsWith(" ----")) || (nextLine.startsWith("-----END ") && nextLine.endsWith("-----"))) {
+				if (currentKeyName == null || !currentKeyName.equals(nextLine.substring(9, nextLine.length() - 5))) {
 					throw new Exception("Corrupt key data found");
 				} else {
 					byte[] keyData = Base64.getDecoder().decode(currentKeyData.toString());
@@ -119,20 +107,32 @@ public class OpenSshKeyReader implements Closeable {
 						} else {
 							throw new Exception("Unknown key encryption cipher: " + keyEncryptionCipherName);
 						}
+
+						keyData = removeLengthCodedPadding(keyData);
 					}
 
 					if (currentKeyName.toLowerCase().contains("private")) {
 						if (keyPair.getPrivate() != null) {
 							throw new Exception("Multiple private key data found");
 						} else {
-							keyPair = readPrivateKey(keyPair, currentKeyName, currentKeyHeaders, keyData);
+							if (currentKeyName == null || "".equals(currentKeyName.trim())) {
+								throw new Exception("Invalid empty key name");
+							} else if (currentKeyName.startsWith("RSA")) {
+								keyPair = readPkcs8RsaPrivateKey(keyData);
+							} else if (currentKeyName.startsWith("DSA")) {
+								keyPair = readPkcs8DsaPrivateKey(keyData);
+							} else if (currentKeyName.startsWith("EC")) {
+								keyPair = readPkcs8EcdsaPrivateKey(keyData);
+							} else {
+								throw new IllegalArgumentException("Unsupported key name: " + currentKeyName);
+							}
 						}
 					} else if (currentKeyName.toLowerCase().contains("public")) {
 						if (keyPair.getPublic() != null) {
 							// keep the first found public key, but check if the new public key fits the old one
 							// TODO
 						} else {
-							keyPair = readPkcs1PublicKey(keyPair, currentKeyName, currentKeyHeaders, keyData);
+							keyPair = readPkcs1PublicKey(keyPair, currentKeyName, keyData);
 						}
 					} else {
 						throw new Exception("Unknown key identifier found");
@@ -160,98 +160,16 @@ public class OpenSshKeyReader implements Closeable {
 		}
 	}
 
-	private KeyPair readPkcs1PublicKey(final KeyPair keyPair, final String keyName, final Map<String, String> keyHeaders, final byte[] data) throws Exception {
+	private KeyPair readPkcs1PublicKey(final KeyPair keyPair, final String keyName, final byte[] data) throws Exception {
 		if (keyName == null || "".equals(keyName.trim())) {
 			throw new Exception("Invalid empty key name");
 		} else {
-			final BlockDataReader publicKeyReader = new BlockDataReader(data);
-			final String algorithmName = publicKeyReader.readString();
-			if (KeyPairUtilities.SSH_ALGORITHM_NAME_RSA.equalsIgnoreCase(algorithmName)) {
-				final BigInteger publicExponent = publicKeyReader.readBigInt();
-				final BigInteger modulus = publicKeyReader.readBigInt();
-
-				final KeyFactory keyFactory = KeyFactory.getInstance("RSA");
-				final PublicKey publicKey = keyFactory.generatePublic(new RSAPublicKeySpec(modulus, publicExponent));
-
-				return new KeyPair(publicKey, keyPair.getPrivate());
-			} else if (KeyPairUtilities.SSH_ALGORITHM_NAME_DSA.equalsIgnoreCase(algorithmName)) {
-				final BigInteger p = publicKeyReader.readBigInt();
-				final BigInteger q = publicKeyReader.readBigInt();
-				final BigInteger g = publicKeyReader.readBigInt();
-
-				final BigInteger y = publicKeyReader.readBigInt();
-
-				final KeyFactory keyFactory = KeyFactory.getInstance("DSA");
-				final PublicKey publicKey = keyFactory.generatePublic(new DSAPublicKeySpec(y, p, q, g));
-
-				return new KeyPair(publicKey, keyPair.getPrivate());
-			} else if (KeyPairUtilities.SSH_ALGORITHM_NAME_ECDSA_NISTP256.equalsIgnoreCase(algorithmName)
-					|| KeyPairUtilities.SSH_ALGORITHM_NAME_ECDSA_NISTP384.equalsIgnoreCase(algorithmName)
-					|| KeyPairUtilities.SSH_ALGORITHM_NAME_ECDSA_NISTP521.equalsIgnoreCase(algorithmName)) {
-				final String curveName = publicKeyReader.readString();
-				if ("nistp256".equals(curveName)) {
-				} else if ("nistp384".equals(curveName)) {
-				} else if ("nistp521".equals(curveName)) {
-				} else {
-					throw new Exception("Unsupported ECDSA curveName: " + curveName);
-				}
-
-				final byte[] qBytes = publicKeyReader.readData();
-				final int xLength = (qBytes.length - 1) / 2;
-				if (4 != qBytes[0]) {
-					throw new Exception("Invalid key data found");
-				}
-				final byte[] x = new byte[xLength];
-				final byte[] y = new byte[xLength];
-				System.arraycopy(qBytes, 1, x, 0, xLength);
-				System.arraycopy(qBytes, xLength + 1, y, 0, xLength);
-
-				final KeyFactory keyFactory = KeyFactory.getInstance("EC");
-				final AlgorithmParameters parameters = AlgorithmParameters.getInstance("EC");
-				parameters.init(new ECGenParameterSpec(curveName.replace("nist", "sec") + "r1"));
-				final ECParameterSpec ecParameterSpec = parameters.getParameterSpec(ECParameterSpec.class);
-
-				final PublicKey publicKey = keyFactory.generatePublic(new ECPublicKeySpec(new ECPoint(new BigInteger(x), new BigInteger(y)), ecParameterSpec));
-
-				return new KeyPair(publicKey, keyPair.getPrivate());
-			} else {
-				throw new IllegalArgumentException("Invalid public key algorithm for PuTTY key (only supports RSA / DSA / EC): " + algorithmName);
-			}
-		}
-		//		else {
-		//			throw new IllegalArgumentException("Unsupported key name: " + keyName);
-		//		}
-	}
-
-	private KeyPair readPrivateKey(final KeyPair keyPair, final String keyName, final Map<String, String> keyHeaders, final byte[] data) throws Exception {
-		if (keyName == null || "".equals(keyName.trim())) {
-			throw new Exception("Invalid empty key name");
-		} else if (keyName.equals("SSH2 PRIVATE KEY")) {
-			return readPkcs1PrivateKey(keyPair, data);
-		} else if (keyName.startsWith("RSA")) {
-			return readRsaPrivateKey(data);
-		} else if (keyName.startsWith("DSA")) {
-			return readDsaPrivateKey(data);
-		} else if (keyName.startsWith("EC")) {
-			return readEcdsaPrivateKey(data);
-		} else {
-			throw new IllegalArgumentException("Unsupported key name: " + keyName);
+			final PublicKey publicKey = KeyPairUtilities.parsePublicKeyBytes(data);
+			return new KeyPair(publicKey, keyPair.getPrivate());
 		}
 	}
 
-	private KeyPair readPkcs1PrivateKey(final KeyPair keyPair, final byte[] data) throws Exception {
-		//		final BlockDataReader privateKeyReader = new BlockDataReader(data);
-		//		final BigInteger test1 = privateKeyReader.readBigInt();
-		//		final BigInteger test2 = privateKeyReader.readBigInt();
-		//		final BigInteger test3 = privateKeyReader.readBigInt();
-		//		final BigInteger test4 = privateKeyReader.readBigInt();
-		//		final BigInteger test5 = privateKeyReader.readBigInt();
-		//		//TODO detect key type
-		//		xxx
-		return new KeyPair(keyPair.getPublic(), keyPair.getPrivate());
-	}
-
-	private KeyPair readRsaPrivateKey(final byte[] data) throws Exception {
+	private KeyPair readPkcs8RsaPrivateKey(final byte[] data) throws Exception {
 		final DerTag enclosingDerTag = Asn1Codec.readDerTag(data);
 		if (Asn1Codec.DER_TAG_SEQUENCE != enclosingDerTag.getTagId()) {
 			throw new Exception("Invalid key data found");
@@ -309,7 +227,7 @@ public class OpenSshKeyReader implements Closeable {
 		return new KeyPair(publicKey, privateKey);
 	}
 
-	private KeyPair readDsaPrivateKey(final byte[] data) throws Exception {
+	private KeyPair readPkcs8DsaPrivateKey(final byte[] data) throws Exception {
 		final DerTag enclosingDerTag = Asn1Codec.readDerTag(data);
 		if (Asn1Codec.DER_TAG_SEQUENCE != enclosingDerTag.getTagId()) {
 			throw new Exception("Invalid key data found");
@@ -352,7 +270,7 @@ public class OpenSshKeyReader implements Closeable {
 		return new KeyPair(publicKey, privateKey);
 	}
 
-	private KeyPair readEcdsaPrivateKey(final byte[] data) throws Exception {
+	private KeyPair readPkcs8EcdsaPrivateKey(final byte[] data) throws Exception {
 		final DerTag enclosingDerTag = Asn1Codec.readDerTag(data);
 		if (Asn1Codec.DER_TAG_SEQUENCE != enclosingDerTag.getTagId()) {
 			throw new Exception("Invalid key data found");
@@ -461,42 +379,19 @@ public class OpenSshKeyReader implements Closeable {
 		return data;
 	}
 
+	private static byte[] removeLengthCodedPadding(final byte[] data) {
+		final int paddingSize = data[data.length - 1];
+		final byte[] dataUnpadded = new byte[data.length - paddingSize];
+		System.arraycopy(data, 0, dataUnpadded, 0, dataUnpadded.length);
+		return dataUnpadded;
+	}
+
 	@Override
 	public void close() throws IOException {
 		try {
 			dataReader.close();
 		} catch (final Exception e) {
 			e.printStackTrace();
-		}
-	}
-
-	private class BlockDataReader {
-		private final DataInput keyDataInput;
-
-		private BlockDataReader(final byte[] key) {
-			keyDataInput = new DataInputStream(new ByteArrayInputStream(key));
-		}
-
-		private BigInteger readBigInt() throws Exception {
-			return new BigInteger(readData());
-		}
-
-		private String readString() throws Exception {
-			return new String(readData(), "ISO-8859-1");
-		}
-
-		private byte[] readData() throws IOException, Exception {
-			try {
-				final int nextBlockSize = keyDataInput.readInt();
-				if (nextBlockSize <= 0) {
-					throw new Exception("Key blocksize error. Maybe the key encrytion password was wrong");
-				}
-				final byte[] nextBlock = new byte[nextBlockSize];
-				keyDataInput.readFully(nextBlock);
-				return nextBlock;
-			} catch (final IOException e) {
-				throw new Exception("Key block read error", e);
-			}
 		}
 	}
 }

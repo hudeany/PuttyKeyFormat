@@ -115,7 +115,8 @@ public class OpenSshKeyTest {
 
 		try (ByteArrayOutputStream byteArrayOutStream = new ByteArrayOutputStream()) {
 			try (OpenSshKeyWriter writer = new OpenSshKeyWriter(byteArrayOutStream)) {
-				writer.writePKCS1Format(keyPair);
+				writer.writePKCS8Format(keyPair, null);
+				writer.writePKCS1Format(keyPair.getPublic());
 			}
 			byteArrayOutStream.flush();
 			keypairPkcs1Data = byteArrayOutStream.toByteArray();

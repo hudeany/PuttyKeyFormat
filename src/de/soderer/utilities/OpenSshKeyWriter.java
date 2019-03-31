@@ -9,7 +9,6 @@ import java.nio.CharBuffer;
 import java.nio.charset.Charset;
 import java.security.KeyPair;
 import java.security.MessageDigest;
-import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.SecureRandom;
 import java.security.interfaces.DSAPrivateKey;
@@ -38,25 +37,6 @@ public class OpenSshKeyWriter implements Closeable {
 	}
 
 	/**
-	 * Converts this keypair into unprotected PEM format (PKCS#1) for OpenSSH keys<br />
-	 * This format includes private and public key data and is accepted by PuTTY's key import<br />
-	 * <br />
-	 * <b>Use with caution, because this key format is not protected by any password</>
-	 */
-	public void writePKCS1Format(final KeyPair keyPair) throws Exception {
-		if (keyPair.getPrivate() != null) {
-			writePKCS1Format(keyPair.getPrivate());
-			if (keyPair.getPublic() != null) {
-				writePKCS1Format(keyPair.getPublic());
-			}
-		} else if (keyPair.getPublic() != null) {
-			writePKCS1Format(keyPair.getPublic());
-		} else {
-			throw new Exception("No keydata included in keypair");
-		}
-	}
-
-	/**
 	 * Converts this public key into unprotected PEM format (PKCS#1) for OpenSSH keys<br />
 	 * This format includes public key data only and is NOT accepted by PuTTY's key import<br />
 	 */
@@ -69,25 +49,6 @@ public class OpenSshKeyWriter implements Closeable {
 		content.append("---- BEGIN SSH2 PUBLIC KEY ----").append("\r\n");
 		content.append(publicKeyBase64).append("\r\n");
 		content.append("---- END SSH2 PUBLIC KEY ----").append("\r\n");
-
-		outputStream.write(content.toString().getBytes("UTF-8"));
-	}
-
-	/**
-	 * Converts this private key into unprotected PEM format (PKCS#1) for OpenSSH keys<br />
-	 * This format includes private key data only and is NOT accepted by PuTTY's key import<br />
-	 * <br />
-	 * <b>Use with caution, because this key format is not protected by any password</>
-	 */
-	public void writePKCS1Format(final PrivateKey privateKey) throws Exception {
-		final byte[] privateKeyBytes = KeyPairUtilities.getPrivateKeyBytes(privateKey);
-
-		final String privateKeyBase64 = toWrappedBase64(privateKeyBytes, 64, "\r\n");
-
-		final StringBuilder content = new StringBuilder();
-		content.append("---- BEGIN SSH2 PRIVATE KEY ----").append("\r\n");
-		content.append(privateKeyBase64).append("\r\n");
-		content.append("---- END SSH2 PRIVATE KEY ----").append("\r\n");
 
 		outputStream.write(content.toString().getBytes("UTF-8"));
 	}
@@ -304,7 +265,7 @@ public class OpenSshKeyWriter implements Closeable {
 				);
 	}
 
-	private static byte[] addLengthCodedPadding(byte[] data, final int paddingSize) {
+	private static byte[] addLengthCodedPadding(final byte[] data, final int paddingSize) {
 		final byte[] dataPadded;
 		if (data.length % paddingSize != 0) {
 			dataPadded = new byte[((data.length / paddingSize) + 1) * paddingSize];
@@ -318,8 +279,7 @@ public class OpenSshKeyWriter implements Closeable {
 		for (int i = data.length; i < dataPadded.length; i++) {
 			dataPadded[i] = padValue;
 		}
-		data = dataPadded;
-		return data;
+		return dataPadded;
 	}
 
 	/**

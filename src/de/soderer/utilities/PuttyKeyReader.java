@@ -118,7 +118,7 @@ public class PuttyKeyReader implements Closeable {
 
 		final String encryptionMethod = headers.get("Encryption");
 
-		final byte[] privateKey;
+		byte[] privateKey;
 		if (encryptionMethod == null || "".equals(encryptionMethod) || "none".equalsIgnoreCase(encryptionMethod)) {
 			privateKey = base64Decoder.decode(data.get("Private-Lines").toString());
 		} else if ("aes256-cbc".equalsIgnoreCase(encryptionMethod)) {

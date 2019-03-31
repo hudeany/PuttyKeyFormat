@@ -1,11 +1,15 @@
 package de.soderer.utilities;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.DataInput;
+import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.security.AlgorithmParameters;
+import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.MessageDigest;
@@ -18,8 +22,12 @@ import java.security.interfaces.ECPrivateKey;
 import java.security.interfaces.ECPublicKey;
 import java.security.interfaces.RSAPrivateCrtKey;
 import java.security.interfaces.RSAPublicKey;
+import java.security.spec.DSAPublicKeySpec;
 import java.security.spec.ECGenParameterSpec;
 import java.security.spec.ECParameterSpec;
+import java.security.spec.ECPoint;
+import java.security.spec.ECPublicKeySpec;
+import java.security.spec.RSAPublicKeySpec;
 import java.util.Base64;
 
 public class KeyPairUtilities {
@@ -72,7 +80,7 @@ public class KeyPairUtilities {
 		if (ecdsaCurveName == null || "".equals(ecdsaCurveName.trim())) {
 			throw new Exception("Missing ECDSA curve name parameter");
 		}
-		final String curveName = ecdsaCurveName.replace("nist", "sec").toLowerCase().trim();
+		final String curveName = ecdsaCurveName.toLowerCase().trim().replace("nist", "sec");
 		if (!"secp256".equals(curveName) && !"secp384".equals(curveName) && !"secp521".equals(curveName)) {
 			throw new Exception("Unknown ECDSA curve name: " + ecdsaCurveName);
 		}
@@ -253,6 +261,56 @@ public class KeyPairUtilities {
 				throw new Exception("Unsupported ssh algorithm name: " + algorithmName);
 			}
 			return publicKeyWriter.toByteArray();
+		}
+	}
+
+	public static PublicKey parsePublicKeyBytes(final byte[] data) throws Exception {
+		final BlockDataReader publicKeyReader = new BlockDataReader(data);
+		final String algorithmName = publicKeyReader.readString();
+		if (KeyPairUtilities.SSH_ALGORITHM_NAME_RSA.equalsIgnoreCase(algorithmName)) {
+			final BigInteger publicExponent = publicKeyReader.readBigInt();
+			final BigInteger modulus = publicKeyReader.readBigInt();
+
+			final KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+			return keyFactory.generatePublic(new RSAPublicKeySpec(modulus, publicExponent));
+		} else if (KeyPairUtilities.SSH_ALGORITHM_NAME_DSA.equalsIgnoreCase(algorithmName)) {
+			final BigInteger p = publicKeyReader.readBigInt();
+			final BigInteger q = publicKeyReader.readBigInt();
+			final BigInteger g = publicKeyReader.readBigInt();
+
+			final BigInteger y = publicKeyReader.readBigInt();
+
+			final KeyFactory keyFactory = KeyFactory.getInstance("DSA");
+			return keyFactory.generatePublic(new DSAPublicKeySpec(y, p, q, g));
+		} else if (KeyPairUtilities.SSH_ALGORITHM_NAME_ECDSA_NISTP256.equalsIgnoreCase(algorithmName)
+				|| KeyPairUtilities.SSH_ALGORITHM_NAME_ECDSA_NISTP384.equalsIgnoreCase(algorithmName)
+				|| KeyPairUtilities.SSH_ALGORITHM_NAME_ECDSA_NISTP521.equalsIgnoreCase(algorithmName)) {
+			final String curveName = publicKeyReader.readString();
+			if ("nistp256".equals(curveName)) {
+			} else if ("nistp384".equals(curveName)) {
+			} else if ("nistp521".equals(curveName)) {
+			} else {
+				throw new Exception("Unsupported ECDSA curveName: " + curveName);
+			}
+
+			final byte[] qBytes = publicKeyReader.readData();
+			final int xLength = (qBytes.length - 1) / 2;
+			if (4 != qBytes[0]) {
+				throw new Exception("Invalid key data found");
+			}
+			final byte[] x = new byte[xLength];
+			final byte[] y = new byte[xLength];
+			System.arraycopy(qBytes, 1, x, 0, xLength);
+			System.arraycopy(qBytes, xLength + 1, y, 0, xLength);
+
+			final KeyFactory keyFactory = KeyFactory.getInstance("EC");
+			final AlgorithmParameters parameters = AlgorithmParameters.getInstance("EC");
+			parameters.init(new ECGenParameterSpec(curveName.replace("nist", "sec") + "r1"));
+			final ECParameterSpec ecParameterSpec = parameters.getParameterSpec(ECParameterSpec.class);
+
+			return keyFactory.generatePublic(new ECPublicKeySpec(new ECPoint(new BigInteger(x), new BigInteger(y)), ecParameterSpec));
+		} else {
+			throw new IllegalArgumentException("Invalid public key algorithm for PuTTY key (only supports RSA / DSA / EC): " + algorithmName);
 		}
 	}
 
@@ -457,6 +515,36 @@ public class KeyPairUtilities {
 
 		private byte[] toByteArray() {
 			return outputStream.toByteArray();
+		}
+	}
+
+	private static class BlockDataReader {
+		private final DataInput keyDataInput;
+
+		private BlockDataReader(final byte[] key) {
+			keyDataInput = new DataInputStream(new ByteArrayInputStream(key));
+		}
+
+		private BigInteger readBigInt() throws Exception {
+			return new BigInteger(readData());
+		}
+
+		private String readString() throws Exception {
+			return new String(readData(), "ISO-8859-1");
+		}
+
+		private byte[] readData() throws IOException, Exception {
+			try {
+				final int nextBlockSize = keyDataInput.readInt();
+				if (nextBlockSize <= 0) {
+					throw new Exception("Key blocksize error. Maybe the key encrytion password was wrong");
+				}
+				final byte[] nextBlock = new byte[nextBlockSize];
+				keyDataInput.readFully(nextBlock);
+				return nextBlock;
+			} catch (final IOException e) {
+				throw new Exception("Key block read error", e);
+			}
 		}
 	}
 }
