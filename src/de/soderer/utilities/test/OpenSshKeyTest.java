@@ -11,14 +11,14 @@ import de.soderer.utilities.OpenSshKeyWriter;
 public class OpenSshKeyTest {
 	public static void main(final String[] args) {
 		try {
-			new OpenSshKeyTest().testRsa();
-			new OpenSshKeyTest().testDsa();
-			new OpenSshKeyTest().testEc256();
-			new OpenSshKeyTest().testSimpleEc256();
-			new OpenSshKeyTest().testEc384();
-			new OpenSshKeyTest().testSimpleEc384();
-			new OpenSshKeyTest().testEc521();
-			new OpenSshKeyTest().testSimpleEc521();
+			testRsa();
+			testDsa();
+			testEc256();
+			testSimpleEc256();
+			testEc384();
+			testSimpleEc384();
+			testEc521();
+			testSimpleEc521();
 
 			System.out.println("Test passed successfully");
 		} catch (final Exception e) {
@@ -26,47 +26,47 @@ public class OpenSshKeyTest {
 		}
 	}
 
-	public void testRsa() throws Exception {
+	public static void testRsa() throws Exception {
 		final KeyPair keyPair = KeyPairUtilities.createRsaKeyPair(2048);
 		testKeyPair(keyPair);
 	}
 
-	public void testDsa() throws Exception {
+	public static void testDsa() throws Exception {
 		final KeyPair keyPair = KeyPairUtilities.createDsaKeyPair(1024);
 		testKeyPair(keyPair);
 	}
 
-	public void testEc256() throws Exception {
+	public static void testEc256() throws Exception {
 		final KeyPair keyPair = KeyPairUtilities.createEllipticCurveKeyPair("nistp256");
 		testKeyPair(keyPair);
 	}
 
-	public void testSimpleEc256() throws Exception {
+	public static void testSimpleEc256() throws Exception {
 		final KeyPair keyPair = KeyPairUtilities.createEllipticCurveKeyPair(256);
 		testKeyPair(keyPair);
 	}
 
-	public void testEc384() throws Exception {
+	public static void testEc384() throws Exception {
 		final KeyPair keyPair = KeyPairUtilities.createEllipticCurveKeyPair("nistp384");
 		testKeyPair(keyPair);
 	}
 
-	public void testSimpleEc384() throws Exception {
+	public static void testSimpleEc384() throws Exception {
 		final KeyPair keyPair = KeyPairUtilities.createEllipticCurveKeyPair(384);
 		testKeyPair(keyPair);
 	}
 
-	public void testEc521() throws Exception {
+	public static void testEc521() throws Exception {
 		final KeyPair keyPair = KeyPairUtilities.createEllipticCurveKeyPair("nistp521");
 		testKeyPair(keyPair);
 	}
 
-	public void testSimpleEc521() throws Exception {
+	public static void testSimpleEc521() throws Exception {
 		final KeyPair keyPair = KeyPairUtilities.createEllipticCurveKeyPair(521);
 		testKeyPair(keyPair);
 	}
 
-	private void testKeyPair(final KeyPair keyPair) throws Exception {
+	private static void testKeyPair(final KeyPair keyPair) throws Exception {
 		final String sha256Fingerprint = KeyPairUtilities.getSha256Fingerprint(keyPair);
 
 		final byte[] privateKeyPkcs8Data;

@@ -12,11 +12,11 @@ import de.soderer.utilities.PuttyKeyWriter;
 public class PuttyKeyTest {
 	public static void main(final String[] args) {
 		try {
-			new PuttyKeyTest().testRsa();
-			new PuttyKeyTest().testDsa();
-			new PuttyKeyTest().testEc256();
-			new PuttyKeyTest().testEc384();
-			new PuttyKeyTest().testEc521();
+			testRsa();
+			testDsa();
+			testEc256();
+			testEc384();
+			testEc521();
 
 			System.out.println("Test passed successfully");
 		} catch (final Exception e) {
@@ -24,7 +24,7 @@ public class PuttyKeyTest {
 		}
 	}
 
-	public void testRsa() throws Exception {
+	public static void testRsa() throws Exception {
 		final KeyPair keyPair = KeyPairUtilities.createRsaKeyPair(2048);
 
 		final String sha256Fingerprint = KeyPairUtilities.getSha256Fingerprint(keyPair);
@@ -53,7 +53,7 @@ public class PuttyKeyTest {
 		}
 	}
 
-	public void testDsa() throws Exception {
+	public static void testDsa() throws Exception {
 		final KeyPair keyPair = KeyPairUtilities.createDsaKeyPair();
 
 		final String sha256Fingerprint = KeyPairUtilities.getSha256Fingerprint(keyPair);
@@ -82,7 +82,7 @@ public class PuttyKeyTest {
 		}
 	}
 
-	public void testEc256() throws Exception {
+	public static void testEc256() throws Exception {
 		final KeyPair keyPair = KeyPairUtilities.createEllipticCurveKeyPair("nistp256");
 
 		final String sha256Fingerprint = KeyPairUtilities.getSha256Fingerprint(keyPair);
@@ -111,7 +111,7 @@ public class PuttyKeyTest {
 		}
 	}
 
-	public void testEc384() throws Exception {
+	public static void testEc384() throws Exception {
 		final KeyPair keyPair = KeyPairUtilities.createEllipticCurveKeyPair("nistp384");
 
 		final String sha256Fingerprint = KeyPairUtilities.getSha256Fingerprint(keyPair);
@@ -140,7 +140,7 @@ public class PuttyKeyTest {
 		}
 	}
 
-	public void testEc521() throws Exception {
+	public static void testEc521() throws Exception {
 		final KeyPair keyPair = KeyPairUtilities.createEllipticCurveKeyPair("nistp521");
 
 		final String sha256Fingerprint = KeyPairUtilities.getSha256Fingerprint(keyPair);
