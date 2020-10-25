@@ -25,8 +25,6 @@ import javax.crypto.Mac;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
-import de.soderer.utilities.WrongPasswordException;
-
 /**
  * Reader for PuTTY ".ppk" keyfiles<br />
  * <br />
