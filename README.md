@@ -1,7 +1,7 @@
 # PuttyKeyFormat (JAVA 8)
 PuttyKeyReader and PuttyKeyWriter (.ppk)  
 Supported ciphers:  
-- ss-rsa (RSA)  
+- ssh-rsa (RSA)  
 - ssh-dss (DSA)  
 - ssh-ecdsa (EC)
 
