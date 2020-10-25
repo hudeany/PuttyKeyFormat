@@ -9,6 +9,7 @@ import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.security.AlgorithmParameters;
 import java.security.KeyFactory;
 import java.security.KeyPair;
@@ -42,8 +43,8 @@ public class OpenSshKeyReader implements Closeable {
 
 	private final BufferedReader dataReader;
 
-	public OpenSshKeyReader(final InputStream inputStream) throws IOException {
-		dataReader = new BufferedReader(new InputStreamReader(inputStream, "UTF-8"));
+	public OpenSshKeyReader(final InputStream inputStream) {
+		dataReader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8));
 	}
 
 	public KeyPair readKey(final char[] password) throws Exception {
@@ -61,14 +62,14 @@ public class OpenSshKeyReader implements Closeable {
 				currentKeyName = nextLine.substring(11, nextLine.length() - 5);
 				currentKeyHeaders = new HashMap<>();
 				currentKeyData = new StringBuilder();
-			} else if (nextLine.equals("---- BEGIN SSH2 PUBLIC KEY ----")) {
+			} else if ("---- BEGIN SSH2 PUBLIC KEY ----".equals(nextLine)) {
 				if (currentKeyName != null) {
 					throw new Exception("Invalid keydata found");
 				}
 				currentKeyName = "SSH2 PUBLIC KEY";
 				currentKeyHeaders = new HashMap<>();
 				currentKeyData = new StringBuilder();
-			} else if (nextLine.equals("---- BEGIN SSH2 PRIVATE KEY ----")) {
+			} else if ("---- BEGIN SSH2 PRIVATE KEY ----".equals(nextLine)) {
 				if (currentKeyName != null) {
 					throw new Exception("Invalid keydata found");
 				}
@@ -77,6 +78,10 @@ public class OpenSshKeyReader implements Closeable {
 				currentKeyData = new StringBuilder();
 			} else if ((nextLine.startsWith("---- END ") && nextLine.endsWith(" ----")) || (nextLine.startsWith("-----END ") && nextLine.endsWith("-----"))) {
 				if (currentKeyName == null || !currentKeyName.equals(nextLine.substring(9, nextLine.length() - 5))) {
+					throw new Exception("Corrupt key data found");
+				} else if (currentKeyData == null) {
+					throw new Exception("Corrupt key data found");
+				} else if (currentKeyHeaders == null) {
 					throw new Exception("Corrupt key data found");
 				} else {
 					byte[] keyData = Base64.getDecoder().decode(currentKeyData.toString());
@@ -115,7 +120,7 @@ public class OpenSshKeyReader implements Closeable {
 						if (keyPair.getPrivate() != null) {
 							throw new Exception("Multiple private key data found");
 						} else {
-							if (currentKeyName == null || "".equals(currentKeyName.trim())) {
+							if ("".equals(currentKeyName.trim())) {
 								throw new Exception("Invalid empty key name");
 							} else if (currentKeyName.startsWith("RSA")) {
 								keyPair = readPkcs8RsaPrivateKey(keyData);
@@ -129,8 +134,7 @@ public class OpenSshKeyReader implements Closeable {
 						}
 					} else if (currentKeyName.toLowerCase().contains("public")) {
 						if (keyPair.getPublic() != null) {
-							// keep the first found public key, but check if the new public key fits the old one
-							// TODO
+							// TODO: keep the first found public key, but check if the new public key fits the old one
 						} else {
 							keyPair = readPkcs1PublicKey(keyPair, currentKeyName, keyData);
 						}
@@ -142,12 +146,15 @@ public class OpenSshKeyReader implements Closeable {
 			} else if (currentKeyName != null) {
 				final int indexOfHeaderSeparator = nextLine.indexOf(": ");
 				if (indexOfHeaderSeparator > 0) {
-					if (currentKeyData.length() > 0) {
+					if (currentKeyData != null && currentKeyData.length() > 0) {
 						throw new Exception("Corrupt key data found");
 					}
 					final String headerName = nextLine.substring(0, indexOfHeaderSeparator).trim();
+					if (currentKeyHeaders == null) {
+						throw new Exception("Corrupt key data found");
+					}
 					currentKeyHeaders.put(headerName, nextLine.substring(indexOfHeaderSeparator + 2));
-				} else {
+				} else if (currentKeyData != null) {
 					currentKeyData.append(nextLine);
 				}
 			}
@@ -160,7 +167,7 @@ public class OpenSshKeyReader implements Closeable {
 		}
 	}
 
-	private KeyPair readPkcs1PublicKey(final KeyPair keyPair, final String keyName, final byte[] data) throws Exception {
+	private static KeyPair readPkcs1PublicKey(final KeyPair keyPair, final String keyName, final byte[] data) throws Exception {
 		if (keyName == null || "".equals(keyName.trim())) {
 			throw new Exception("Invalid empty key name");
 		} else {
@@ -169,7 +176,7 @@ public class OpenSshKeyReader implements Closeable {
 		}
 	}
 
-	private KeyPair readPkcs8RsaPrivateKey(final byte[] data) throws Exception {
+	private static KeyPair readPkcs8RsaPrivateKey(final byte[] data) throws Exception {
 		final DerTag enclosingDerTag = Asn1Codec.readDerTag(data);
 		if (Asn1Codec.DER_TAG_SEQUENCE != enclosingDerTag.getTagId()) {
 			throw new Exception("Invalid key data found");
@@ -227,7 +234,7 @@ public class OpenSshKeyReader implements Closeable {
 		return new KeyPair(publicKey, privateKey);
 	}
 
-	private KeyPair readPkcs8DsaPrivateKey(final byte[] data) throws Exception {
+	private static KeyPair readPkcs8DsaPrivateKey(final byte[] data) throws Exception {
 		final DerTag enclosingDerTag = Asn1Codec.readDerTag(data);
 		if (Asn1Codec.DER_TAG_SEQUENCE != enclosingDerTag.getTagId()) {
 			throw new Exception("Invalid key data found");
@@ -270,7 +277,7 @@ public class OpenSshKeyReader implements Closeable {
 		return new KeyPair(publicKey, privateKey);
 	}
 
-	private KeyPair readPkcs8EcdsaPrivateKey(final byte[] data) throws Exception {
+	private static KeyPair readPkcs8EcdsaPrivateKey(final byte[] data) throws Exception {
 		final DerTag enclosingDerTag = Asn1Codec.readDerTag(data);
 		if (Asn1Codec.DER_TAG_SEQUENCE != enclosingDerTag.getTagId()) {
 			throw new Exception("Invalid key data found");
@@ -307,7 +314,7 @@ public class OpenSshKeyReader implements Closeable {
 			try {
 				throw new Exception("Unsupported ec curve oid found: " + new OID(oidBytes).getStringEncoding());
 			} catch (final Exception e) {
-				throw new Exception("Invalid ec curve oid found");
+				throw new Exception("Invalid ec curve oid found", e);
 			}
 		}
 
@@ -340,7 +347,7 @@ public class OpenSshKeyReader implements Closeable {
 	}
 
 	private static byte[] stretchPasswordForOpenSsl(final char[] password, final byte[] iv, final int usingIvSize, final int keySize) throws Exception {
-		final byte[] passphraseBytes = toBytes(password, "ISO-8859-1");
+		final byte[] passphraseBytes = toBytes(password, StandardCharsets.ISO_8859_1);
 		final MessageDigest hash = MessageDigest.getInstance("MD5");
 		final byte[] key = new byte[keySize];
 		int hashesSize = keySize & 0XFFFFFFF0;
@@ -363,8 +370,8 @@ public class OpenSshKeyReader implements Closeable {
 		return key;
 	}
 
-	private static byte[] toBytes(final char[] chars, final String encoding) {
-		final ByteBuffer byteBuffer = Charset.forName(encoding).encode(CharBuffer.wrap(chars));
+	private static byte[] toBytes(final char[] chars, final Charset encoding) {
+		final ByteBuffer byteBuffer = encoding.encode(CharBuffer.wrap(chars));
 		final byte[] bytes = Arrays.copyOfRange(byteBuffer.array(), byteBuffer.position(), byteBuffer.limit());
 		Arrays.fill(byteBuffer.array(), (byte) 0); // clear sensitive data
 		return bytes;

@@ -10,6 +10,7 @@ import java.io.StringReader;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
@@ -39,13 +40,13 @@ import javax.crypto.spec.SecretKeySpec;
 public class PuttyKeyWriter implements Closeable {
 	private final OutputStream outputStream;
 
-	public PuttyKeyWriter(final OutputStream outputStream) throws IOException {
+	public PuttyKeyWriter(final OutputStream outputStream) {
 		this.outputStream = outputStream;
 	}
 
 	public void writeKey(final PuttyKey puttyKey, final char[] password) throws Exception {
 		final String algorithmName = puttyKey.getAlgorithm();
-		final byte[] passwordBytes = password == null || password.length == 0 ? null : toBytes(password, "ISO-8859-1");
+		final byte[] passwordBytes = password == null || password.length == 0 ? null : toBytes(password, StandardCharsets.ISO_8859_1);
 
 		final byte[] publicKeyBytes = puttyKey.getPublicKeyBytes();
 		byte[] privateKeyBytes = puttyKey.getPrivateKeyBytes();
@@ -77,10 +78,10 @@ public class PuttyKeyWriter implements Closeable {
 		content.append(privateKeyBase64).append("\r\n");
 		content.append("Private-MAC: ").append(macHash);
 
-		outputStream.write(content.toString().getBytes("ISO-8859-1"));
+		outputStream.write(content.toString().getBytes(StandardCharsets.ISO_8859_1));
 	}
 
-	private byte[] addRandomPadding(final byte[] data, final int paddingSize) {
+	private static byte[] addRandomPadding(final byte[] data, final int paddingSize) {
 		if (data.length % paddingSize != 0) {
 			final byte[] dataPadded;
 			dataPadded = new byte[((data.length / paddingSize) + 1) * paddingSize];
@@ -130,15 +131,15 @@ public class PuttyKeyWriter implements Closeable {
 		final ByteArrayOutputStream out = new ByteArrayOutputStream();
 		final DataOutputStream data = new DataOutputStream(out);
 
-		final byte[] keyTypeBytes = keyType.getBytes("ISO-8859-1");
+		final byte[] keyTypeBytes = keyType.getBytes(StandardCharsets.ISO_8859_1);
 		data.writeInt(keyTypeBytes.length);
 		data.write(keyTypeBytes);
 
-		final byte[] encryptionTypeBytes = encryptionType.getBytes("ISO-8859-1");
+		final byte[] encryptionTypeBytes = encryptionType.getBytes(StandardCharsets.ISO_8859_1);
 		data.writeInt(encryptionTypeBytes.length);
 		data.write(encryptionTypeBytes);
 
-		final byte[] commentBytes = comment.getBytes("ISO-8859-1");
+		final byte[] commentBytes = comment.getBytes(StandardCharsets.ISO_8859_1);
 		data.writeInt(commentBytes.length);
 		data.write(commentBytes);
 
@@ -173,7 +174,7 @@ public class PuttyKeyWriter implements Closeable {
 	 * Converts byte array to base64 with linebreaks
 	 */
 	private static String toWrappedBase64(final byte[] byteArray, final int maxLineLength, final String lineBreak) {
-		return Base64.getMimeEncoder(maxLineLength, lineBreak.getBytes(Charset.forName("ISO-8859-1"))).encodeToString(byteArray);
+		return Base64.getMimeEncoder(maxLineLength, lineBreak.getBytes(StandardCharsets.ISO_8859_1)).encodeToString(byteArray);
 	}
 
 	private static String toHexString(final byte[] data) {
@@ -199,8 +200,8 @@ public class PuttyKeyWriter implements Closeable {
 		}
 	}
 
-	private static byte[] toBytes(final char[] chars, final String encoding) {
-		final ByteBuffer byteBuffer = Charset.forName(encoding).encode(CharBuffer.wrap(chars));
+	private static byte[] toBytes(final char[] chars, final Charset encoding) {
+		final ByteBuffer byteBuffer = encoding.encode(CharBuffer.wrap(chars));
 		final byte[] bytes = Arrays.copyOfRange(byteBuffer.array(), byteBuffer.position(), byteBuffer.limit());
 		Arrays.fill(byteBuffer.array(), (byte) 0); // clear sensitive data
 		return bytes;

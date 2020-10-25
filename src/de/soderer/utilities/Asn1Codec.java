@@ -115,7 +115,7 @@ public class Asn1Codec {
 		int lengthInBytes = 0;
 		while (value > 0) {
 			lengthInBytes++;
-			value >>= 8;
+			value = value >> 8;
 		}
 		return lengthInBytes;
 	}

@@ -5,6 +5,7 @@ import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.security.AlgorithmParameters;
 import java.security.KeyFactory;
 import java.security.KeyPair;
@@ -32,9 +33,9 @@ public class PuttyKey {
 	 */
 	public PuttyKey(final String comment, final KeyPair keyPair) throws Exception {
 		this.comment = comment;
-		if (!keyPair.getPublic().getAlgorithm().equals("RSA")
-				&& !keyPair.getPublic().getAlgorithm().equals("DSA")
-				&& !keyPair.getPublic().getAlgorithm().equals("EC")) {
+		if (!"RSA".equals(keyPair.getPublic().getAlgorithm())
+				&& !"DSA".equals(keyPair.getPublic().getAlgorithm())
+				&& !"EC".equals(keyPair.getPublic().getAlgorithm())) {
 			throw new IllegalArgumentException("Invalid public key algorithm for PuTTY key (only supports RSA / DSA / EC): " + keyPair.getPublic().getAlgorithm());
 		}
 		this.keyPair = keyPair;
@@ -89,8 +90,11 @@ public class PuttyKey {
 					|| KeyPairUtilities.SSH_ALGORITHM_NAME_ECDSA_NISTP521.equalsIgnoreCase(algorithmName)) {
 				final String curveName = publicKeyReader.readString();
 				if ("nistp256".equals(curveName)) {
+					// Do nothing
 				} else if ("nistp384".equals(curveName)) {
+					// Do nothing
 				} else if ("nistp521".equals(curveName)) {
+					// Do nothing
 				} else {
 					throw new Exception("Unsupported ECDSA curveName: " + curveName);
 				}
@@ -187,7 +191,7 @@ public class PuttyKey {
 		}
 
 		private String readString() throws Exception {
-			return new String(readData(), "ISO-8859-1");
+			return new String(readData(), StandardCharsets.ISO_8859_1);
 		}
 
 		private byte[] readData() throws IOException, Exception {

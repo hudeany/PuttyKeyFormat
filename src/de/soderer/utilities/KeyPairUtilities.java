@@ -8,6 +8,7 @@ import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.security.AlgorithmParameters;
 import java.security.KeyFactory;
 import java.security.KeyPair;
@@ -128,11 +129,11 @@ public class KeyPairUtilities {
 	public static String getAlgorithm(final PublicKey publicKey) throws Exception {
 		if (publicKey == null){
 			throw new Exception("Invalid empty publicKey parameter");
-		} else if (publicKey.getAlgorithm().equals("RSA")){
+		} else if ("RSA".equals(publicKey.getAlgorithm())){
 			return SSH_ALGORITHM_NAME_RSA;
-		} else if(publicKey.getAlgorithm().equals("DSA")){
+		} else if("DSA".equals(publicKey.getAlgorithm())){
 			return SSH_ALGORITHM_NAME_DSA;
-		} else if(publicKey.getAlgorithm().equals("EC") || publicKey.getAlgorithm().equals("ECDSA")){
+		} else if("EC".equals(publicKey.getAlgorithm()) || "ECDSA".equals(publicKey.getAlgorithm())){
 			final int bitLength = ((ECPublicKey) publicKey).getW().getAffineX().bitLength();
 			if (bitLength <= 256) {
 				return SSH_ALGORITHM_NAME_ECDSA_NISTP256;
@@ -287,8 +288,11 @@ public class KeyPairUtilities {
 				|| KeyPairUtilities.SSH_ALGORITHM_NAME_ECDSA_NISTP521.equalsIgnoreCase(algorithmName)) {
 			final String curveName = publicKeyReader.readString();
 			if ("nistp256".equals(curveName)) {
+				// Do nothing
 			} else if ("nistp384".equals(curveName)) {
+				// Do nothing
 			} else if ("nistp521".equals(curveName)) {
+				// Do nothing
 			} else {
 				throw new Exception("Unsupported ECDSA curveName: " + curveName);
 			}
@@ -497,7 +501,7 @@ public class KeyPairUtilities {
 		}
 
 		private void writeString(final String stringData) throws Exception {
-			writeData(stringData.getBytes("ISO-8859-1"));
+			writeData(stringData.getBytes(StandardCharsets.ISO_8859_1));
 		}
 
 		private void writeData(final byte[] data) throws IOException, Exception {
@@ -530,7 +534,7 @@ public class KeyPairUtilities {
 		}
 
 		private String readString() throws Exception {
-			return new String(readData(), "ISO-8859-1");
+			return new String(readData(), StandardCharsets.ISO_8859_1);
 		}
 
 		private byte[] readData() throws IOException, Exception {

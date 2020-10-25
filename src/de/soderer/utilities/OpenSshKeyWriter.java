@@ -1,12 +1,12 @@
 package de.soderer.utilities;
 
 import java.io.Closeable;
-import java.io.IOException;
 import java.io.OutputStream;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.MessageDigest;
 import java.security.PublicKey;
@@ -32,7 +32,7 @@ public class OpenSshKeyWriter implements Closeable {
 
 	private final OutputStream outputStream;
 
-	public OpenSshKeyWriter(final OutputStream outputStream) throws IOException {
+	public OpenSshKeyWriter(final OutputStream outputStream) {
 		this.outputStream = outputStream;
 	}
 
@@ -50,7 +50,7 @@ public class OpenSshKeyWriter implements Closeable {
 		content.append(publicKeyBase64).append("\r\n");
 		content.append("---- END SSH2 PUBLIC KEY ----").append("\r\n");
 
-		outputStream.write(content.toString().getBytes("UTF-8"));
+		outputStream.write(content.toString().getBytes(StandardCharsets.UTF_8));
 	}
 
 	/**
@@ -130,10 +130,10 @@ public class OpenSshKeyWriter implements Closeable {
 			keyData = cipher.doFinal(keyData);
 		}
 
-		outputStream.write(("-----BEGIN " + keyTypeName + "-----\n").getBytes("UTF-8"));
-		outputStream.write(getPemHeaderLines(headers, 64).getBytes("UTF-8"));
-		outputStream.write(toWrappedBase64(keyData, 64, "\n").getBytes("UTF-8"));
-		outputStream.write(("\n-----END " + keyTypeName + "-----\n").getBytes("UTF-8"));
+		outputStream.write(("-----BEGIN " + keyTypeName + "-----\n").getBytes(StandardCharsets.UTF_8));
+		outputStream.write(getPemHeaderLines(headers, 64).getBytes(StandardCharsets.UTF_8));
+		outputStream.write(toWrappedBase64(keyData, 64, "\n").getBytes(StandardCharsets.UTF_8));
+		outputStream.write(("\n-----END " + keyTypeName + "-----\n").getBytes(StandardCharsets.UTF_8));
 	}
 
 	/**
@@ -184,7 +184,7 @@ public class OpenSshKeyWriter implements Closeable {
 	}
 
 	private static byte[] stretchPasswordForOpenSsl(final char[] password, final byte[] iv, final int usingIvSize, final int keySize) throws Exception {
-		final byte[] passphraseBytes = toBytes(password, "ISO-8859-1");
+		final byte[] passphraseBytes = toBytes(password, StandardCharsets.ISO_8859_1);
 		final MessageDigest hash = MessageDigest.getInstance("MD5");
 		final byte[] key = new byte[keySize];
 		int hashesSize = keySize & 0XFFFFFFF0;
@@ -286,7 +286,7 @@ public class OpenSshKeyWriter implements Closeable {
 	 * Converts byte array to base64 with linebreaks
 	 */
 	private static String toWrappedBase64(final byte[] byteArray, final int maxLineLength, final String lineBreak) {
-		return Base64.getMimeEncoder(maxLineLength, lineBreak.getBytes(Charset.forName("UTF-8"))).encodeToString(byteArray);
+		return Base64.getMimeEncoder(maxLineLength, lineBreak.getBytes(StandardCharsets.UTF_8)).encodeToString(byteArray);
 	}
 
 	private static String toHexString(final byte[] data) {
@@ -297,8 +297,8 @@ public class OpenSshKeyWriter implements Closeable {
 		return returnString.toString();
 	}
 
-	private static byte[] toBytes(final char[] chars, final String encoding) {
-		final ByteBuffer byteBuffer = Charset.forName(encoding).encode(CharBuffer.wrap(chars));
+	private static byte[] toBytes(final char[] chars, final Charset encoding) {
+		final ByteBuffer byteBuffer = encoding.encode(CharBuffer.wrap(chars));
 		final byte[] bytes = Arrays.copyOfRange(byteBuffer.array(), byteBuffer.position(), byteBuffer.limit());
 		Arrays.fill(byteBuffer.array(), (byte) 0); // clear sensitive data
 		return bytes;

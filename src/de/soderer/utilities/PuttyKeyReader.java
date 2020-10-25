@@ -11,7 +11,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
@@ -24,6 +24,8 @@ import javax.crypto.Cipher;
 import javax.crypto.Mac;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
+
+import de.soderer.utilities.WrongPasswordException;
 
 /**
  * Reader for PuTTY ".ppk" keyfiles<br />
@@ -55,15 +57,15 @@ public class PuttyKeyReader implements Closeable {
 		}
 	}
 
-	public PuttyKeyReader(final InputStream inputStream) throws IOException {
-		dataReader = new BufferedReader(new InputStreamReader(inputStream, "ISO-8859-1"));
+	public PuttyKeyReader(final InputStream inputStream) {
+		dataReader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.ISO_8859_1));
 	}
 
 	public PuttyKey readKey(final char[] password) throws Exception {
 		final byte[] passwordByteArray;
 		if (password != null && password.length > 0)  {
 			final CharBuffer charBuffer = CharBuffer.wrap(password);
-			final ByteBuffer byteBuffer = Charset.forName("ISO-8859-1").encode(charBuffer);
+			final ByteBuffer byteBuffer = StandardCharsets.ISO_8859_1.encode(charBuffer);
 			passwordByteArray = Arrays.copyOfRange(byteBuffer.array(), byteBuffer.position(), byteBuffer.limit());
 		} else {
 			passwordByteArray = null;
@@ -185,15 +187,15 @@ public class PuttyKeyReader implements Closeable {
 		final ByteArrayOutputStream out = new ByteArrayOutputStream();
 		final DataOutputStream data = new DataOutputStream(out);
 
-		final byte[] keyTypeBytes = keyType.getBytes("ISO-8859-1");
+		final byte[] keyTypeBytes = keyType.getBytes(StandardCharsets.ISO_8859_1);
 		data.writeInt(keyTypeBytes.length);
 		data.write(keyTypeBytes);
 
-		final byte[] encryptionTypeBytes = encryptionType.getBytes("ISO-8859-1");
+		final byte[] encryptionTypeBytes = encryptionType.getBytes(StandardCharsets.ISO_8859_1);
 		data.writeInt(encryptionTypeBytes.length);
 		data.write(encryptionTypeBytes);
 
-		final byte[] commentBytes = comment.getBytes("ISO-8859-1");
+		final byte[] commentBytes = comment.getBytes(StandardCharsets.ISO_8859_1);
 		data.writeInt(commentBytes.length);
 		data.write(commentBytes);
 

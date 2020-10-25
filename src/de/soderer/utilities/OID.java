@@ -35,7 +35,7 @@ public class OID {
 				try {
 					id[i] = Integer.parseInt(parts[i]);
 				} catch (final Exception e) {
-					throw new Exception("Invalid OID data: " + oidString);
+					throw new Exception("Invalid OID data: " + oidString, e);
 				}
 			}
 		}
